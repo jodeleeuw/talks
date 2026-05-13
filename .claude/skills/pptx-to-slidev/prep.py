@@ -76,12 +76,46 @@ def get_xfrm(elem):
     }
 
 
+def _run_format(r):
+    """Extract bold/italic/color from a run's rPr. None color = inherits default."""
+    rpr = r.find("a:rPr", NS)
+    bold = italic = False
+    color = None
+    if rpr is not None:
+        bold = rpr.attrib.get("b") == "1"
+        italic = rpr.attrib.get("i") == "1"
+        clr = rpr.find(".//a:srgbClr", NS)
+        if clr is not None:
+            color = clr.attrib.get("val")
+    return bold, italic, color
+
+
 def extract_paragraphs(elem):
-    """Return [{text, level}] for each non-empty paragraph under elem."""
+    """Return [{text, level, runs}] for each non-empty paragraph under elem.
+
+    Each run is {text, bold, italic, color} where color is the 6-char srgb hex
+    or None (inherits default). Runs let downstream code spot highlight builds
+    where adjacent slides share text but differ in per-run formatting.
+    """
+    a_ns = "{%s}" % NS["a"]
     out = []
-    for p in elem.iter("{%s}p" % NS["a"]):
-        text = "".join((t.text or "") for t in p.iter("{%s}t" % NS["a"]))
-        if not text.strip():
+    for p in elem.iter(a_ns + "p"):
+        runs = []
+        for child in list(p):
+            tag = child.tag[len(a_ns):] if child.tag.startswith(a_ns) else child.tag
+            if tag == "r":
+                bold, italic, color = _run_format(child)
+                t = child.find("a:t", NS)
+                text = (t.text or "") if t is not None else ""
+                runs.append({"text": text, "bold": bold, "italic": italic, "color": color})
+            elif tag == "fld":
+                t = child.find("a:t", NS)
+                text = (t.text or "") if t is not None else ""
+                runs.append({"text": text, "bold": False, "italic": False, "color": None})
+            elif tag == "br":
+                runs.append({"text": "\n", "bold": False, "italic": False, "color": None})
+        full = "".join(r["text"] for r in runs)
+        if not full.strip():
             continue
         level = 0
         pPr = p.find("a:pPr", NS)
@@ -90,7 +124,7 @@ def extract_paragraphs(elem):
                 level = int(pPr.attrib["lvl"])
             except ValueError:
                 pass
-        out.append({"text": text, "level": level})
+        out.append({"text": full, "level": level, "runs": runs})
     return out
 
 
@@ -185,6 +219,42 @@ def parse_notes(zf, notes_path):
     return "\n".join(parts).strip()
 
 
+def _run_tag(r):
+    """Compact label describing a run's formatting deviations from the default."""
+    parts = []
+    if r.get("bold"):
+        parts.append("b")
+    if r.get("italic"):
+        parts.append("i")
+    if r.get("color"):
+        parts.append("#" + r["color"])
+    return "+".join(parts) if parts else "default"
+
+
+def _is_formatted(r):
+    return bool(r.get("bold") or r.get("italic") or r.get("color"))
+
+
+def _slide_plain_text(slide):
+    """Concatenated plain text of every paragraph on the slide, for fingerprinting."""
+    parts = []
+    for sh in slide.get("shapes", []):
+        for p in sh.get("text", []):
+            parts.append(p["text"])
+    return "\n".join(parts).strip()
+
+
+def _slide_format_signature(slide):
+    """Tuple of (text, tag) per run on the slide. Differs between highlight states."""
+    sig = []
+    for sh in slide.get("shapes", []):
+        for p in sh.get("text", []):
+            for r in p.get("runs", []) or []:
+                if r.get("text", "").strip():
+                    sig.append((r["text"], _run_tag(r)))
+    return tuple(sig)
+
+
 def write_summary(path, analysis):
     L = []
     L.append(f"# PPTX analysis: {analysis['pptx']}")
@@ -196,20 +266,43 @@ def write_summary(path, analysis):
     L.append(f"- Slide count: {len(analysis['slides'])}")
     L.append("")
     L.append("> Look for **adjacent slides with overlapping text/shapes** — they are almost always build-up animations to collapse into one Slidev slide with `v-click` reveals.")
+    L.append(">")
+    L.append("> A common variant: adjacent slides with **identical plain text but different run formatting** (bold/color shifts). That's a highlight-reveal build, not a duplicate. The script flags these inline as `⚠ HIGHLIGHT-REVEAL …`. Collapse them into one slide whose runs toggle their `.active` class based on `$clicks`.")
     L.append("")
+
+    prev_plain = None
+    prev_sig = None
+    prev_index = None
     for s in analysis["slides"]:
         L.append(f"## Slide {s['index']}")
+
+        plain = _slide_plain_text(s)
+        sig = _slide_format_signature(s)
+        if plain and plain == prev_plain and sig != prev_sig:
+            L.append("")
+            L.append(f"> ⚠ HIGHLIGHT-REVEAL: same plain text as slide {prev_index}, but per-run formatting differs. Collapse with slide {prev_index} into one Slidev slide where each segment toggles highlight on click.")
+        prev_plain, prev_sig, prev_index = plain, sig, s["index"]
 
         # Text paragraphs across all shapes
         text_paras = []
         for sh in s.get("shapes", []):
             for p in sh.get("text", []):
-                text_paras.append((p["level"], p["text"]))
+                text_paras.append(p)
         if text_paras:
             L.append("")
             L.append("**Text:**")
-            for level, text in text_paras:
-                L.append(f"{'  ' * level}- {text}")
+            for p in text_paras:
+                indent = "  " * p["level"]
+                L.append(f"{indent}- {p['text']}")
+                runs = p.get("runs") or []
+                if any(_is_formatted(r) for r in runs):
+                    for r in runs:
+                        if not r.get("text", "").strip():
+                            continue
+                        snippet = r["text"]
+                        if len(snippet) > 140:
+                            snippet = snippet[:60] + " … " + snippet[-60:]
+                        L.append(f"{indent}  - `[{_run_tag(r)}]` {snippet!r}")
 
         pics = s.get("pictures") or []
         if pics:

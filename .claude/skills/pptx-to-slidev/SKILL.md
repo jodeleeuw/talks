@@ -40,7 +40,7 @@ After the script runs, **read `_analysis.md`** end-to-end, then design and write
 2. Scan for **adjacent slides with overlapping content** — these are nearly always build-up animations (progressive bullets, diagram states, highlight passes). Plan to collapse them into a single Slidev slide with click reveals.
 3. Decide each slide's Slidev layout (see table below).
 4. Replace the template's placeholder `slides.md` with your converted deck.
-5. Verify the build: `cd <talk-dir> && npm install && npx slidev build`. If it succeeds, `rm -rf dist/`. If it fails, read the error, fix, rebuild.
+5. Verify the build: `cd <talk-dir> && npm install && npx slidev build`. If it succeeds, `rm -rf dist/`. If it fails, read the error, fix, rebuild. Note that `build` can pass while the dev server still warns on diagram slides — see the indent/blank-line gotcha below.
 6. Delete `_analysis.json` and `_analysis.md`.
 
 ### Mapping slide kinds to Slidev layouts
@@ -61,10 +61,34 @@ These are starting points, not rules. Pick whatever reads best.
 
 Google Slides and PowerPoint don't have native click reveals, so authors duplicate a slide multiple times with one extra element each — a stack of slides 3, 4, 5, 6 with identical text but different highlights, or slides 8, 9, 10, 11 that build a diagram one piece at a time. The analysis output makes these obvious because the text/shape lists overlap heavily across consecutive slides.
 
+Three patterns to watch for in `_analysis.md`:
+
+1. **Progressive bullets / shapes** — adjacent slides where each one adds elements. Collapse with `<v-clicks>` or `v-click="N"`.
+2. **Diagram build-ups** — adjacent slides where new shapes appear over a constant base. Collapse using `<g v-click="N">` groups inside one SVG.
+3. **Highlight reveals** — adjacent slides with **identical plain text** but **different per-run formatting** (a sentence is black on one slide and gray on the next). The script flags these as `⚠ HIGHLIGHT-REVEAL` in the analysis and prints a per-run `[default] / [#XXXXXX] / [b]` breakdown under each formatted paragraph. **Do not collapse these by stripping formatting** — that loses the speaker's emphasis cue. Instead, split the text into segments and bind a class to `$clicks`:
+
+   ```md
+   ---
+   layout: quote
+   clicks: 3
+   ---
+
+   <p>
+     <span :class="{ on: $clicks === 0 }">First segment…</span>
+     <span :class="{ on: $clicks === 1 }">Second segment…</span>
+   </p>
+
+   <style scoped>
+   span { opacity: 0.3; transition: opacity .3s; }
+   span.on { opacity: 1; }
+   </style>
+   ```
+
 Collapse them into **one** Slidev slide and use clicks:
 
 - For sequential text reveals, wrap children in `<v-clicks>...</v-clicks>`.
 - For explicit indexing across heterogeneous elements (mix of divs, SVG groups, etc.), use the `v-click="N"` directive on each element. This works inside SVG `<g>` too, which is essential for staged diagrams.
+- For highlight reveals, bind a CSS class to `$clicks` (as shown above) so the active segment is emphasized and the others fade.
 
 The resulting slide preserves the original click count, but the markdown stays compact.
 
@@ -78,6 +102,19 @@ When the analysis lists multiple shapes and connectors with positions, the slide
 4. Use **`stroke="currentColor"`** on SVG strokes and **`background: var(--slidev-theme-bg, transparent)`** on box fills. A theme can then recolor the whole diagram by changing the text color and one CSS variable.
 5. Put structural CSS in a `<style scoped>` block in the slide. Use **semantic class names** the theme can target — `diagram-box`, `box-data`, `box-theory`, `datapoint`, `diagram-label`, etc. — not utility-name-only classes like `red-box`.
 6. Wrap each progressive-reveal group in `<g v-click="N">` (or a div, for non-SVG elements). The `v-click` directive works inside SVG without ceremony.
+
+### Gotcha: blank lines + indentation inside HTML/SVG blocks
+
+Slidev passes slide content through a markdown parser before Vue compiles the result. Inside an HTML block (`<div>`, `<svg>`, `<g>`, …) the parser treats a blank line as a paragraph break and will then re-enter markdown mode for what follows. If the next line is indented **4+ spaces** (the natural indent for a nested SVG child), markdown wraps it in `<pre><code>` — which Vue then emits as an "Element is missing end tag" build error or a `<pre> cannot be child of <svg>` dev-server warning.
+
+The warning is visible only when running the dev server (`npm run dev`); `npx slidev build` can succeed in spite of it. Always do a quick dev-server pass on diagram-heavy slides before declaring victory.
+
+Two fixes (either works):
+
+- **Flatten:** strip the leading indentation on SVG/HTML children so no line starts with 4+ spaces, and remove blank lines between siblings inside the block.
+- **Keep readable indent, lose the blank lines:** indented children are fine *as long as no blank line precedes them*. The blank line is what re-arms the markdown code-block rule.
+
+Prefer flattening for big diagrams — it's robust and the geometry doesn't get less readable since the coordinates are right there in the attributes.
 
 ### Images
 
