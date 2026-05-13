@@ -142,14 +142,187 @@ def parse_rels(zf, rels_path):
     return out
 
 
+# PPTX connection-site indices for common preset shapes. The 4 cardinal sites
+# (top/left/bottom/right) cover rect, roundRect, ellipse, and diamond — which
+# are essentially every shape used in talk diagrams.
+#
+# Google Slides' PPTX export uses a counter-clockwise ordering: 0=top, 1=left,
+# 2=bottom, 3=right. The OOXML spec defines the preset shapes with clockwise
+# ordering (top/right/bottom/left), but Google's export ignores that and emits
+# its own indices. Since this skill is aimed at Google-Slides decks, we follow
+# Google's convention. Verified empirically against connector bbox geometry on
+# the "01 - What is a model" deck — every idx=1 lined up with the left edge,
+# every idx=3 with the right.
+_SITE_NAMES = ["top", "left", "bottom", "right"]
+
+
+def _local_site(prst, w, h, idx):
+    """Return (lx, ly, name) in shape-local coords, or None if idx is unknown.
+
+    Falls back to the 4-cardinal convention for unknown presets — wrong for
+    chevrons/triangles, but those don't appear in talk diagrams in practice.
+    """
+    if idx is None or w is None or h is None:
+        return None
+    if not (0 <= idx < 4):
+        return None
+    sites = [
+        (w / 2, 0),       # 0: top
+        (0, h / 2),       # 1: left
+        (w / 2, h),       # 2: bottom
+        (w, h / 2),       # 3: right
+    ]
+    lx, ly = sites[idx]
+    return (round(lx, 1), round(ly, 1), _SITE_NAMES[idx])
+
+
+def _shape_snap_point(shape, idx):
+    """Return {x, y, shape_id, site} for a snap onto a shape's connection site."""
+    bb = shape.get("bbox") or {}
+    if bb.get("x") is None:
+        return None
+    site = _local_site(shape.get("prst", ""), bb.get("w"), bb.get("h"), idx)
+    if site is None:
+        return None
+    lx, ly, name = site
+    return {
+        "x": round(bb["x"] + lx, 1),
+        "y": round(bb["y"] + ly, 1),
+        "shape_id": shape.get("id"),
+        "site": name,
+    }
+
+
+def _bbox_endpoints(bbox):
+    """Best-effort (start, end) for an unsnapped connector from its bbox + flips.
+
+    Connectors run diagonally across their bbox; flipH/flipV swap the corners.
+    Rotation is ignored — the unsnapped case is approximate by definition.
+    """
+    if not bbox or bbox.get("x") is None:
+        return None, None
+    x, y, w, h = bbox["x"], bbox["y"], bbox["w"], bbox["h"]
+    sx, sy = x, y
+    ex, ey = x + w, y + h
+    if bbox.get("flipH"):
+        sx, ex = ex, sx
+    if bbox.get("flipV"):
+        sy, ey = ey, sy
+    return (
+        {"x": round(sx, 1), "y": round(sy, 1), "shape_id": None, "site": None},
+        {"x": round(ex, 1), "y": round(ey, 1), "shape_id": None, "site": None},
+    )
+
+
+def _classify_kind(prst):
+    """Map a connector preset name to a coarse routing kind."""
+    if not prst:
+        return "unknown"
+    if prst.startswith("straight"):
+        return "straight"
+    if prst.startswith("bentConnector"):
+        # bentConnector2 = one bend (L), bentConnector3 = two bends (U/Z), etc.
+        suffix = prst[len("bentConnector"):]
+        return f"bent{suffix}" if suffix.isdigit() else "bent"
+    if prst.startswith("curved"):
+        return "curved"
+    return prst
+
+
+def _suggest_path(connector, bend_offset=80):
+    """Synthesize an SVG `d` string that matches the source routing kind.
+
+    Straight connectors → `L`. Bent connectors → orthogonal `H`/`V` segments
+    (sharp 90° corners, like PowerPoint draws them). Curved connectors → a
+    quadratic Bézier through the midpoint. Returns None when endpoints are
+    unknown.
+    """
+    st = connector.get("start") or {}
+    en = connector.get("end") or {}
+    sx, sy, ex, ey = st.get("x"), st.get("y"), en.get("x"), en.get("y")
+    if None in (sx, sy, ex, ey):
+        return None
+
+    kind = connector.get("kind", _classify_kind(connector.get("prst", "")))
+    s_site = st.get("site")
+    e_site = en.get("site")
+
+    def fmt(n):
+        # Trim trailing .0 for readability.
+        return f"{n:g}"
+
+    if kind == "straight":
+        return f"M {fmt(sx)} {fmt(sy)} L {fmt(ex)} {fmt(ey)}"
+
+    if kind == "curved":
+        mx, my = (sx + ex) / 2, (sy + ey) / 2
+        return f"M {fmt(sx)} {fmt(sy)} Q {fmt(mx)} {fmt(my)} {fmt(ex)} {fmt(ey)}"
+
+    if kind == "bent2":
+        # L-bend: leave the start perpendicular to its site, then turn 90°.
+        if s_site in ("top", "bottom"):
+            return f"M {fmt(sx)} {fmt(sy)} V {fmt(ey)} H {fmt(ex)}"
+        return f"M {fmt(sx)} {fmt(sy)} H {fmt(ex)} V {fmt(ey)}"
+
+    if kind == "bent3":
+        # U-bend (both sites parallel) or Z-bend (perpendicular sites).
+        if s_site in ("top", "bottom") and e_site in ("top", "bottom"):
+            extend = bend_offset
+            if s_site == "top":
+                mid_y = min(sy, ey) - extend
+            else:
+                mid_y = max(sy, ey) + extend
+            return f"M {fmt(sx)} {fmt(sy)} V {fmt(mid_y)} H {fmt(ex)} V {fmt(ey)}"
+        if s_site in ("left", "right") and e_site in ("left", "right"):
+            extend = bend_offset
+            if s_site == "left":
+                mid_x = min(sx, ex) - extend
+            else:
+                mid_x = max(sx, ex) + extend
+            return f"M {fmt(sx)} {fmt(sy)} H {fmt(mid_x)} V {fmt(ey)} H {fmt(ex)}"
+        # Mixed sites: collapse to an L-bend.
+        if s_site in ("top", "bottom"):
+            return f"M {fmt(sx)} {fmt(sy)} V {fmt(ey)} H {fmt(ex)}"
+        return f"M {fmt(sx)} {fmt(sy)} H {fmt(ex)} V {fmt(ey)}"
+
+    # Unknown bent shape (bent4/5, etc.) — straight-line fallback the user can
+    # nudge by hand.
+    return f"M {fmt(sx)} {fmt(sy)} L {fmt(ex)} {fmt(ey)}"
+
+
+def _arrow_direction(line_el):
+    """Read a:headEnd / a:tailEnd to decide arrow direction.
+
+    OOXML calls the start of the line 'head' and the end 'tail'. So
+    tailEnd type != 'none' means an arrowhead at the end point (forward).
+    """
+    if line_el is None:
+        return "none"
+    head = line_el.find("a:headEnd", NS)
+    tail = line_el.find("a:tailEnd", NS)
+    head_t = head.attrib.get("type", "none") if head is not None else "none"
+    tail_t = tail.attrib.get("type", "none") if tail is not None else "none"
+    fwd = tail_t and tail_t != "none"
+    rev = head_t and head_t != "none"
+    if fwd and rev:
+        return "both"
+    if fwd:
+        return "forward"
+    if rev:
+        return "reverse"
+    return "none"
+
+
 def parse_slide(zf, slide_path, rels_path):
     root = parse_xml(zf, slide_path)
     if root is None:
         return {"error": f"could not parse {slide_path}"}
 
     shapes = []
+    shape_by_id = {}
     for sp in root.iter("{%s}sp" % NS["p"]):
         cnv = sp.find("p:nvSpPr/p:cNvPr", NS)
+        sp_id = cnv.attrib.get("id") if cnv is not None else None
         name = cnv.attrib.get("name", "") if cnv is not None else ""
         prst = ""
         spPr = sp.find("p:spPr", NS)
@@ -157,12 +330,16 @@ def parse_slide(zf, slide_path, rels_path):
             prst_el = spPr.find("a:prstGeom", NS)
             if prst_el is not None:
                 prst = prst_el.attrib.get("prst", "")
-        shapes.append({
+        shape = {
+            "id": sp_id,
             "name": name,
             "prst": prst,
             "bbox": get_xfrm(sp),
             "text": extract_paragraphs(sp),
-        })
+        }
+        shapes.append(shape)
+        if sp_id:
+            shape_by_id[sp_id] = shape
 
     connectors = []
     for cxn in root.iter("{%s}cxnSp" % NS["p"]):
@@ -170,15 +347,49 @@ def parse_slide(zf, slide_path, rels_path):
         name = cnv.attrib.get("name", "") if cnv is not None else ""
         prst = ""
         spPr = cxn.find("p:spPr", NS)
+        line_el = None
         if spPr is not None:
             prst_el = spPr.find("a:prstGeom", NS)
             if prst_el is not None:
                 prst = prst_el.attrib.get("prst", "")
-        connectors.append({
+            line_el = spPr.find("a:ln", NS)
+
+        st_el = cxn.find("p:nvCxnSpPr/p:cNvCxnSpPr/a:stCxn", NS)
+        en_el = cxn.find("p:nvCxnSpPr/p:cNvCxnSpPr/a:endCxn", NS)
+        bbox = get_xfrm(cxn)
+
+        # Compute snapped endpoints when possible; fall back to bbox geometry.
+        fb_start, fb_end = _bbox_endpoints(bbox)
+        start = end = None
+        if st_el is not None:
+            sid = st_el.attrib.get("id")
+            sidx = int(st_el.attrib.get("idx", "-1")) if st_el.attrib.get("idx") else None
+            target = shape_by_id.get(sid)
+            if target is not None:
+                start = _shape_snap_point(target, sidx)
+        if en_el is not None:
+            eid = en_el.attrib.get("id")
+            eidx = int(en_el.attrib.get("idx", "-1")) if en_el.attrib.get("idx") else None
+            target = shape_by_id.get(eid)
+            if target is not None:
+                end = _shape_snap_point(target, eidx)
+        if start is None:
+            start = fb_start
+        if end is None:
+            end = fb_end
+
+        record = {
             "name": name,
             "prst": prst,
-            "bbox": get_xfrm(cxn),
-        })
+            "kind": _classify_kind(prst),
+            "bbox": bbox,
+            "start": start,
+            "end": end,
+            "arrow": _arrow_direction(line_el),
+            "snapped": bool(start and start.get("shape_id")) and bool(end and end.get("shape_id")),
+        }
+        record["path"] = _suggest_path(record)
+        connectors.append(record)
 
     image_refs = parse_rels(zf, rels_path)
     pictures = []
@@ -244,6 +455,37 @@ def _slide_plain_text(slide):
     return "\n".join(parts).strip()
 
 
+_BASIC_PRESETS = {"rect", "roundRect", "ellipse", "oval", "diamond", "rhombus"}
+
+
+def _mermaidable(slide):
+    """Decide if a slide's diagram could be re-expressed as a Mermaid flowchart.
+
+    Returns a hint string (e.g. "LR" / "TB") when the slide looks like a clean
+    node-edge graph, or None when it carries spatial meaning Mermaid would lose.
+    """
+    shapes = slide.get("shapes", []) or []
+    cxns = slide.get("connectors", []) or []
+    pics = slide.get("pictures", []) or []
+    text_shapes = [s for s in shapes if any(p.get("text", "").strip() for p in s.get("text", []))]
+    if pics or len(text_shapes) < 2 or not cxns:
+        return None
+    if any(s.get("prst") not in _BASIC_PRESETS for s in text_shapes):
+        return None
+    if not all(c.get("snapped") for c in cxns):
+        return None
+    # Direction hint from connector vectors.
+    hsum = vsum = 0
+    for c in cxns:
+        st = c.get("start") or {}
+        en = c.get("end") or {}
+        if None in (st.get("x"), st.get("y"), en.get("x"), en.get("y")):
+            continue
+        hsum += abs(en["x"] - st["x"])
+        vsum += abs(en["y"] - st["y"])
+    return "LR" if hsum >= vsum else "TB"
+
+
 def _slide_format_signature(slide):
     """Tuple of (text, tag) per run on the slide. Differs between highlight states."""
     sig = []
@@ -283,6 +525,11 @@ def write_summary(path, analysis):
             L.append(f"> ⚠ HIGHLIGHT-REVEAL: same plain text as slide {prev_index}, but per-run formatting differs. Collapse with slide {prev_index} into one Slidev slide where each segment toggles highlight on click.")
         prev_plain, prev_sig, prev_index = plain, sig, s["index"]
 
+        mhint = _mermaidable(s)
+        if mhint:
+            L.append("")
+            L.append(f"> 💡 Mermaid candidate ({mhint}): all shapes are basic and all connectors snap to them — consider a `mermaid` block instead of hand-rolled SVG. Skip if the diagram's spatial layout is itself meaningful.")
+
         # Text paragraphs across all shapes
         text_paras = []
         for sh in s.get("shapes", []):
@@ -318,8 +565,10 @@ def write_summary(path, analysis):
             if bb.get("x") is None:
                 continue
             txt = " | ".join(p["text"] for p in sh.get("text", []))
+            sid = sh.get("id")
+            id_tag = f"#{sid} " if sid else ""
             shape_lines.append(
-                f"- `{sh.get('prst', '?')}` at ({bb.get('x')}, {bb.get('y')}) size {bb.get('w')}×{bb.get('h')}  text={txt!r}"
+                f"- {id_tag}`{sh.get('prst', '?')}` at ({bb.get('x')}, {bb.get('y')}) size {bb.get('w')}×{bb.get('h')}  text={txt!r}"
             )
         if shape_lines:
             L.append("")
@@ -329,18 +578,22 @@ def write_summary(path, analysis):
         cxns = s.get("connectors") or []
         if cxns:
             L.append("")
-            L.append("**Connectors:**")
+            L.append("**Connectors** (routing matches the source — paste the suggested `d` straight into an SVG `<path>`):")
+            arrow_glyph = {"forward": "→", "reverse": "←", "both": "↔", "none": "—"}
             for c in cxns:
-                bb = c.get("bbox") or {}
-                flips = []
-                if bb.get("flipH"):
-                    flips.append("flipH")
-                if bb.get("flipV"):
-                    flips.append("flipV")
-                fs = " " + "+".join(flips) if flips else ""
+                st = c.get("start") or {}
+                en = c.get("end") or {}
+                glyph = arrow_glyph.get(c.get("arrow", "none"), "—")
+                anchor_s = f"#{st['shape_id']} {st.get('site')}" if st.get("shape_id") else "free"
+                anchor_e = f"#{en['shape_id']} {en.get('site')}" if en.get("shape_id") else "free"
+                snap = "snapped" if c.get("snapped") else "loose"
+                kind = c.get("kind", "?")
+                d_attr = c.get("path") or ""
                 L.append(
-                    f"- `{c.get('prst', '?')}` at ({bb.get('x')}, {bb.get('y')}) size {bb.get('w')}×{bb.get('h')}{fs}"
+                    f"- `{c.get('prst', '?')}` (kind={kind}, {snap}, arrow={c.get('arrow')}): {anchor_s} {glyph} {anchor_e}"
                 )
+                if d_attr:
+                    L.append(f"  - `d=\"{d_attr}\"`")
 
         notes = s.get("notes") or ""
         if notes:

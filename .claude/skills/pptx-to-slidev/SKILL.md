@@ -98,10 +98,16 @@ When the analysis lists multiple shapes and connectors with positions, the slide
 
 1. Use the deck size from the analysis header as the SVG `viewBox`: `viewBox="0 0 <w> <h>"`. This makes the shape positions in the analysis usable directly.
 2. Position outer boxes as absolutely-placed `<div>`s using **percentages** of that coordinate system (e.g. an x of 620 px on a 960-wide deck → `left: 64.6%`). Percentages mean the diagram scales with the slide and the source coords stay readable.
-3. Draw connectors as SVG `<path>` elements inside a single `<svg>` overlay layered over the boxes. The connector positions in the analysis are approximate end-points — you'll usually need to nudge them, and a curved `Q`/`C` path looks better than a straight line.
+3. Draw connectors as SVG `<path>` elements inside a single `<svg>` overlay layered over the boxes. Each connector in the analysis has a `kind` and a suggested `d="…"` string that **matches the source routing** — sharp `H`/`V` segments for bent connectors, `L` for straight, `Q` for curved. Paste the suggested `d` as-is; only swap routing styles when you have a deliberate reason to (e.g. the orthogonal lines collide visually). The endpoints are snapped to the source shape's connection sites (top/right/bottom/left), so the geometry will already match.
 4. Use **`stroke="currentColor"`** on SVG strokes and **`background: var(--slidev-theme-bg, transparent)`** on box fills. A theme can then recolor the whole diagram by changing the text color and one CSS variable.
 5. Put structural CSS in a `<style scoped>` block in the slide. Use **semantic class names** the theme can target — `diagram-box`, `box-data`, `box-theory`, `datapoint`, `diagram-label`, etc. — not utility-name-only classes like `red-box`.
 6. Wrap each progressive-reveal group in `<g v-click="N">` (or a div, for non-SVG elements). The `v-click` directive works inside SVG without ceremony.
+
+### When to use Mermaid instead
+
+If a slide is flagged `💡 Mermaid candidate (LR|TB)` in the analysis, every shape is a basic node and every connector snaps cleanly between two shapes — the diagram is graph-shaped, not spatially meaningful. Prefer a Slidev ```` ```mermaid ```` block in those cases: less code, automatic layout, and `v-click` still works via CSS class toggles. Skip the suggestion when the spatial arrangement itself carries meaning (e.g. a "World ↔ Mind" pair with curved arrows above and below — Mermaid would flatten that into a flow and destroy the metaphor).
+
+See `.agents/skills/slidev/references/diagram-mermaid.md` (installed via `npx skills add slidevjs/slidev`) for Mermaid-in-Slidev specifics.
 
 ### Gotcha: blank lines + indentation inside HTML/SVG blocks
 
