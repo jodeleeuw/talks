@@ -4,7 +4,8 @@ pptx-to-slidev prep: scaffold a Slidev talk dir from a PPTX file and
 emit a structured analysis Claude can read to write slides.md.
 
 Stdlib only. Writes a new talk dir under <repo>/<output-name>/ containing:
-  - the template's files (package.json, slides.md, .gitignore)
+  - everything in template/ (package.json, slides.md, vite.config.ts,
+    components/Diagram.vue, diagrams/, ...)
   - every image from the PPTX, co-located with slides.md
   - _analysis.json + _analysis.md describing each slide
 """
@@ -58,8 +59,79 @@ def get_deck_size(root):
     return (cx or DEFAULT_DECK[0], cy or DEFAULT_DECK[1])
 
 
+def _group_transform(grpSp):
+    """Return (dx, dy, sx, sy) for a p:grpSp's child coordinate system.
+
+    A group's xfrm carries both the group's slide-position (off/ext) and its
+    internal coordinate system (chOff/chExt). A child at (cx, cy) in the group's
+    local frame renders at slide coord (off.x + (cx - chOff.x) * (ext / chExt),
+    off.y + (cy - chOff.y) * (ext / chExt)). Returns the (dx, dy, sx, sy) that
+    maps local → slide.
+    """
+    xfrm = grpSp.find("p:grpSpPr/a:xfrm", NS)
+    if xfrm is None:
+        return (0.0, 0.0, 1.0, 1.0)
+    off = xfrm.find("a:off", NS)
+    ext = xfrm.find("a:ext", NS)
+    chOff = xfrm.find("a:chOff", NS)
+    chExt = xfrm.find("a:chExt", NS)
+    if off is None or ext is None or chOff is None or chExt is None:
+        return (0.0, 0.0, 1.0, 1.0)
+    ox = emu_to_px(off.attrib.get("x", 0))
+    oy = emu_to_px(off.attrib.get("y", 0))
+    ex = emu_to_px(ext.attrib.get("cx", 0))
+    ey = emu_to_px(ext.attrib.get("cy", 0))
+    cox = emu_to_px(chOff.attrib.get("x", 0))
+    coy = emu_to_px(chOff.attrib.get("y", 0))
+    cex = emu_to_px(chExt.attrib.get("cx", 0))
+    cey = emu_to_px(chExt.attrib.get("cy", 0))
+    sx = ex / cex if cex else 1.0
+    sy = ey / cey if cey else 1.0
+    return (ox - cox * sx, oy - coy * sy, sx, sy)
+
+
+def _compose_transform(outer, inner):
+    """Compose two (dx, dy, sx, sy) transforms — outer applied to inner's output."""
+    odx, ody, osx, osy = outer
+    idx, idy, isx, isy = inner
+    return (odx + osx * idx, ody + osy * idy, osx * isx, osy * isy)
+
+
+def _walk_shapes(root):
+    """Yield (element, transform) for each sp / cxnSp / pic, applying any
+    enclosing p:grpSp transforms so element bboxes can be mapped to slide-
+    absolute coords."""
+    def walk(parent, transform):
+        for child in parent:
+            tag = child.tag.split('}', 1)[-1]
+            if tag == 'grpSp':
+                new_t = _compose_transform(transform, _group_transform(child))
+                yield from walk(child, new_t)
+            elif tag in ('sp', 'cxnSp', 'pic'):
+                yield child, transform
+            else:
+                yield from walk(child, transform)
+    yield from walk(root, (0.0, 0.0, 1.0, 1.0))
+
+
+def apply_transform(bbox, transform):
+    """Apply (dx, dy, sx, sy) to a bbox dict; returns a new dict (or None)."""
+    if bbox is None:
+        return None
+    dx, dy, sx, sy = transform
+    return {
+        **bbox,
+        "x": dx + sx * bbox["x"],
+        "y": dy + sy * bbox["y"],
+        "w": sx * bbox["w"],
+        "h": sy * bbox["h"],
+    }
+
+
 def get_xfrm(elem):
-    xfrm = elem.find(".//a:xfrm", NS)
+    xfrm = elem.find("p:spPr/a:xfrm", NS)
+    if xfrm is None:
+        xfrm = elem.find("p:grpSpPr/a:xfrm", NS)
     if xfrm is None:
         return None
     off = xfrm.find("a:off", NS)
@@ -320,29 +392,38 @@ def parse_slide(zf, slide_path, rels_path):
 
     shapes = []
     shape_by_id = {}
-    for sp in root.iter("{%s}sp" % NS["p"]):
-        cnv = sp.find("p:nvSpPr/p:cNvPr", NS)
-        sp_id = cnv.attrib.get("id") if cnv is not None else None
-        name = cnv.attrib.get("name", "") if cnv is not None else ""
-        prst = ""
-        spPr = sp.find("p:spPr", NS)
-        if spPr is not None:
-            prst_el = spPr.find("a:prstGeom", NS)
-            if prst_el is not None:
-                prst = prst_el.attrib.get("prst", "")
-        shape = {
-            "id": sp_id,
-            "name": name,
-            "prst": prst,
-            "bbox": get_xfrm(sp),
-            "text": extract_paragraphs(sp),
-        }
-        shapes.append(shape)
-        if sp_id:
-            shape_by_id[sp_id] = shape
+    deferred_connectors = []  # (elem, transform) — process after shapes are ready
+    deferred_pictures = []
+
+    for elem, transform in _walk_shapes(root):
+        tag = elem.tag.split('}', 1)[-1]
+        if tag == 'sp':
+            cnv = elem.find("p:nvSpPr/p:cNvPr", NS)
+            sp_id = cnv.attrib.get("id") if cnv is not None else None
+            name = cnv.attrib.get("name", "") if cnv is not None else ""
+            prst = ""
+            spPr = elem.find("p:spPr", NS)
+            if spPr is not None:
+                prst_el = spPr.find("a:prstGeom", NS)
+                if prst_el is not None:
+                    prst = prst_el.attrib.get("prst", "")
+            shape = {
+                "id": sp_id,
+                "name": name,
+                "prst": prst,
+                "bbox": apply_transform(get_xfrm(elem), transform),
+                "text": extract_paragraphs(elem),
+            }
+            shapes.append(shape)
+            if sp_id:
+                shape_by_id[sp_id] = shape
+        elif tag == 'cxnSp':
+            deferred_connectors.append((elem, transform))
+        elif tag == 'pic':
+            deferred_pictures.append((elem, transform))
 
     connectors = []
-    for cxn in root.iter("{%s}cxnSp" % NS["p"]):
+    for cxn, transform in deferred_connectors:
         cnv = cxn.find("p:nvCxnSpPr/p:cNvPr", NS)
         name = cnv.attrib.get("name", "") if cnv is not None else ""
         prst = ""
@@ -356,7 +437,7 @@ def parse_slide(zf, slide_path, rels_path):
 
         st_el = cxn.find("p:nvCxnSpPr/p:cNvCxnSpPr/a:stCxn", NS)
         en_el = cxn.find("p:nvCxnSpPr/p:cNvCxnSpPr/a:endCxn", NS)
-        bbox = get_xfrm(cxn)
+        bbox = apply_transform(get_xfrm(cxn), transform)
 
         # Compute snapped endpoints when possible; fall back to bbox geometry.
         fb_start, fb_end = _bbox_endpoints(bbox)
@@ -393,14 +474,14 @@ def parse_slide(zf, slide_path, rels_path):
 
     image_refs = parse_rels(zf, rels_path)
     pictures = []
-    for pic in root.iter("{%s}pic" % NS["p"]):
+    for pic, transform in deferred_pictures:
         cnv = pic.find("p:nvPicPr/p:cNvPr", NS)
         name = cnv.attrib.get("name", "") if cnv is not None else ""
         blip = pic.find(".//a:blip", NS)
         rid = blip.attrib.get("{%s}embed" % NS["r"], "") if blip is not None else ""
         pictures.append({
             "name": name,
-            "bbox": get_xfrm(pic),
+            "bbox": apply_transform(get_xfrm(pic), transform),
             "file": image_refs.get(rid),
         })
 
@@ -497,6 +578,165 @@ def _slide_format_signature(slide):
     return tuple(sig)
 
 
+def _round_pos(v, step=0.5):
+    """Quantize a coordinate so tiny drift between adjacent slides doesn't break matching."""
+    if v is None:
+        return None
+    return round(v / step) * step
+
+
+def _shape_text(sh):
+    return " | ".join(p["text"] for p in sh.get("text", []))
+
+
+def _shape_pos_key(sh):
+    bb = sh.get("bbox") or {}
+    return (
+        sh.get("prst", ""),
+        _round_pos(bb.get("x")),
+        _round_pos(bb.get("y")),
+        _round_pos(bb.get("w")),
+        _round_pos(bb.get("h")),
+    )
+
+
+def _connector_key(c):
+    st = c.get("start") or {}
+    en = c.get("end") or {}
+    return (
+        c.get("kind", ""),
+        _round_pos(st.get("x")), _round_pos(st.get("y")),
+        _round_pos(en.get("x")), _round_pos(en.get("y")),
+        c.get("arrow", "none"),
+    )
+
+
+def _picture_key(pic):
+    bb = pic.get("bbox") or {}
+    return (
+        pic.get("file", ""),
+        _round_pos(bb.get("x")), _round_pos(bb.get("y")),
+        _round_pos(bb.get("w")), _round_pos(bb.get("h")),
+    )
+
+
+def _diff_by_key(prev_items, curr_items, key_fn):
+    """Match items by key_fn; return (added, removed, paired).
+
+    paired is a list of (prev_item, curr_item) at the same key — caller can
+    inspect those for non-key differences (e.g. text changes on a shape with
+    unchanged geometry).
+    """
+    prev_by = {}
+    curr_by = {}
+    for it in prev_items:
+        prev_by.setdefault(key_fn(it), []).append(it)
+    for it in curr_items:
+        curr_by.setdefault(key_fn(it), []).append(it)
+    added, removed, paired = [], [], []
+    for k in set(prev_by) | set(curr_by):
+        p_list = prev_by.get(k, [])
+        c_list = curr_by.get(k, [])
+        n_pairs = min(len(p_list), len(c_list))
+        for i in range(n_pairs):
+            paired.append((p_list[i], c_list[i]))
+        if len(p_list) > n_pairs:
+            removed.extend(p_list[n_pairs:])
+        if len(c_list) > n_pairs:
+            added.extend(c_list[n_pairs:])
+    return added, removed, paired
+
+
+def _shape_one_line(sh):
+    bb = sh.get("bbox") or {}
+    txt = _shape_text(sh)
+    return f"`{sh.get('prst', '?')}` at ({bb.get('x')}, {bb.get('y')}) size {bb.get('w')}×{bb.get('h')}  text={txt!r}"
+
+
+def _connector_one_line(c):
+    st = c.get("start") or {}
+    en = c.get("end") or {}
+    arrow_glyph = {"forward": "→", "reverse": "←", "both": "↔", "none": "—"}
+    glyph = arrow_glyph.get(c.get("arrow", "none"), "—")
+    return f"`{c.get('kind', '?')}` (arrow={c.get('arrow')}): ({st.get('x')}, {st.get('y')}) {glyph} ({en.get('x')}, {en.get('y')})"
+
+
+def _picture_one_line(pic):
+    bb = pic.get("bbox") or {}
+    return f"`{pic.get('file', '?')}` at ({bb.get('x')}, {bb.get('y')}) size {bb.get('w')}×{bb.get('h')}"
+
+
+def _emit_diff(L, prev_slide, curr_slide, *, limit=40):
+    """Append a per-transition diff block to L. No-op if there's no prior slide
+    or if the slides are identical at the shape/connector/picture level.
+
+    A single diff block represents ONE source-slide transition — if the author
+    revealed five shapes between these two slides, all five should share the
+    same `revealAt` in the resulting Slidev build-up. See SKILL.md.
+    """
+    if prev_slide is None:
+        return
+    prev_shapes = [s for s in prev_slide.get("shapes", []) or []
+                   if (s.get("bbox") or {}).get("x") is not None]
+    curr_shapes = [s for s in curr_slide.get("shapes", []) or []
+                   if (s.get("bbox") or {}).get("x") is not None]
+
+    s_added, s_removed, s_paired = _diff_by_key(prev_shapes, curr_shapes, _shape_pos_key)
+    s_modified = [(p, c) for (p, c) in s_paired if _shape_text(p) != _shape_text(c)]
+
+    c_added, c_removed, _ = _diff_by_key(
+        prev_slide.get("connectors", []) or [],
+        curr_slide.get("connectors", []) or [],
+        _connector_key,
+    )
+    p_added, p_removed, _ = _diff_by_key(
+        prev_slide.get("pictures", []) or [],
+        curr_slide.get("pictures", []) or [],
+        _picture_key,
+    )
+
+    total = (len(s_added) + len(s_removed) + len(s_modified)
+             + len(c_added) + len(c_removed) + len(p_added) + len(p_removed))
+    if total == 0:
+        return
+
+    L.append("")
+    L.append(
+        f"**Diff from slide {prev_slide['index']}** "
+        f"(if this is a build-up, treat the whole block as **one click** — every entry below shares the same `revealAt`):"
+    )
+
+    def emit_list(label, items, formatter):
+        L.append(f"- {label} ({len(items)}):")
+        for it in items[:limit]:
+            L.append(f"  - {formatter(it)}")
+        if len(items) > limit:
+            L.append(f"  - … and {len(items) - limit} more (see full shape list below)")
+
+    if s_added:
+        emit_list("added shapes", s_added, _shape_one_line)
+    if s_removed:
+        emit_list("removed shapes", s_removed, _shape_one_line)
+    if s_modified:
+        L.append(f"- text/content changes on existing shapes ({len(s_modified)}):")
+        for prev_sh, curr_sh in s_modified[:limit]:
+            bb = curr_sh.get("bbox") or {}
+            L.append(
+                f"  - `{curr_sh.get('prst', '?')}` at ({bb.get('x')}, {bb.get('y')}): "
+                f"{_shape_text(prev_sh)!r} → {_shape_text(curr_sh)!r}"
+            )
+        if len(s_modified) > limit:
+            L.append(f"  - … and {len(s_modified) - limit} more")
+    if c_added:
+        emit_list("added connectors", c_added, _connector_one_line)
+    if c_removed:
+        emit_list("removed connectors", c_removed, _connector_one_line)
+    if p_added:
+        emit_list("added pictures", p_added, _picture_one_line)
+    if p_removed:
+        emit_list("removed pictures", p_removed, _picture_one_line)
+
+
 def write_summary(path, analysis):
     L = []
     L.append(f"# PPTX analysis: {analysis['pptx']}")
@@ -509,12 +749,15 @@ def write_summary(path, analysis):
     L.append("")
     L.append("> Look for **adjacent slides with overlapping text/shapes** — they are almost always build-up animations to collapse into one Slidev slide with `v-click` reveals.")
     L.append(">")
+    L.append("> **Each `**Diff from slide N**` block below is ONE click in the build-up.** If a diff lists five new shapes, all five share the same `revealAt`. Don't fragment a single source-slide transition across multiple clicks — the author chose to reveal those elements together for a reason (a node and its label, a binary op's two inputs, a structure and its annotation). Number clicks by source-slide transition, not by element count.")
+    L.append(">")
     L.append("> A common variant: adjacent slides with **identical plain text but different run formatting** (bold/color shifts). That's a highlight-reveal build, not a duplicate. The script flags these inline as `⚠ HIGHLIGHT-REVEAL …`. Collapse them into one slide whose runs toggle their `.active` class based on `$clicks`.")
     L.append("")
 
     prev_plain = None
     prev_sig = None
     prev_index = None
+    prev_slide = None
     for s in analysis["slides"]:
         L.append(f"## Slide {s['index']}")
 
@@ -529,6 +772,9 @@ def write_summary(path, analysis):
         if mhint:
             L.append("")
             L.append(f"> 💡 Mermaid candidate ({mhint}): all shapes are basic and all connectors snap to them — consider a `mermaid` block instead of hand-rolled SVG. Skip if the diagram's spatial layout is itself meaningful.")
+
+        _emit_diff(L, prev_slide, s)
+        prev_slide = s
 
         # Text paragraphs across all shapes
         text_paras = []
