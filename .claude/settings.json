@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx vitest run *)",
+      "Bash(npx tsc --noEmit *)",
+      "Bash(awk *)",
+      "Bash(./node_modules/.bin/tsc --noEmit *)",
+      "Bash(./node_modules/.bin/vitest run *)"
+    ]
+  }
+}
