@@ -114,18 +114,82 @@ function canonicalRoute(r) {
   throw new Error(`Diagram: unknown route "${r}" (use "VH"/"HV" or "vertical-horizontal"/"horizontal-vertical")`)
 }
 
+const SIDE_NORMAL = {
+  top:    [0, -1],
+  right:  [1,  0],
+  bottom: [0,  1],
+  left:   [-1, 0],
+}
+
+function snapInfo(ref) {
+  // Extract { id, side } from a snap reference, or null if `ref` isn't snap-like.
+  // Works for both bare "id.side" strings and { snap: "id.side", dx, dy } objects.
+  let raw = null
+  if (typeof ref === 'string') raw = ref
+  else if (ref && typeof ref === 'object' && typeof ref.snap === 'string') raw = ref.snap
+  if (!raw) return null
+  const [id, side = 'center'] = raw.split('.')
+  return { id, side }
+}
+
+function pickOutset(outset, end) {
+  if (outset == null) return 0
+  if (typeof outset === 'number') return outset
+  if (typeof outset === 'object') return outset[end] ?? 0
+  return 0
+}
+
 function pathFor(c) {
   if (c.d) return c.d
   const start = resolvePoint(c.from)
   const end = resolvePoint(c.to)
+
+  // `outset` pushes each snapped endpoint perpendicular to its face by N px
+  // before routing — matches PowerPoint's "bent connector" leave/arrive style
+  // and lets self-loops on adjacent sides auto-route around the shape's corner.
+  const fromSnap = snapInfo(c.from)
+  const toSnap = snapInfo(c.to)
+  const fromNormal = fromSnap ? SIDE_NORMAL[fromSnap.side] : null
+  const toNormal = toSnap ? SIDE_NORMAL[toSnap.side] : null
+  const fromOut = pickOutset(c.outset, 'from')
+  const toOut = pickOutset(c.outset, 'to')
+  const fromStub = (fromOut && fromNormal)
+    ? [start[0] + fromNormal[0] * fromOut, start[1] + fromNormal[1] * fromOut]
+    : null
+  const toStub = (toOut && toNormal)
+    ? [end[0] + toNormal[0] * toOut, end[1] + toNormal[1] * toOut]
+    : null
+
   const points = [start]
+  if (fromStub) points.push(fromStub)
+
+  // route/via operate between the stubs (when present), so the perpendicular
+  // approach segments are preserved at both ends.
+  const innerStart = fromStub ?? start
+  const innerEnd = toStub ?? end
   const route = canonicalRoute(c.route)
-  if (route === 'VH') points.push([start[0], end[1]])
-  else if (route === 'HV') points.push([end[0], start[1]])
+  if (route === 'VH') points.push([innerStart[0], innerEnd[1]])
+  else if (route === 'HV') points.push([innerEnd[0], innerStart[1]])
   for (const v of c.via ?? []) {
     const [px, py] = points[points.length - 1]
     points.push([resolveAxis(v.x, 0) ?? px, resolveAxis(v.y, 1) ?? py])
   }
+
+  // Self-loop auto-corner: from and to snap to the same shape on perpendicular
+  // sides, with both stubs and no explicit route/via. The corner sits at the
+  // intersection of the two stubs' axes — outside the shape, naturally.
+  const selfLoop = fromSnap && toSnap
+    && fromSnap.id === toSnap.id
+    && fromNormal && toNormal
+    && fromNormal[0] * toNormal[0] + fromNormal[1] * toNormal[1] === 0  // perpendicular
+  if (selfLoop && !route && !(c.via && c.via.length) && fromStub && toStub) {
+    const fromIsHoriz = fromNormal[0] !== 0
+    const cornerX = fromIsHoriz ? fromStub[0] : toStub[0]
+    const cornerY = fromIsHoriz ? toStub[1] : fromStub[1]
+    points.push([cornerX, cornerY])
+  }
+
+  if (toStub) points.push(toStub)
   points.push(end)
   let path = `M ${points[0][0]} ${points[0][1]}`
   for (let i = 1; i < points.length; i++) {
@@ -137,6 +201,24 @@ function pathFor(c) {
     else path += ` L ${cx} ${cy}`
   }
   return path
+}
+
+function arrowMarkers(c) {
+  // Normalize the connector's `arrow` field into { start, end } booleans.
+  // Backwards-compatible defaults: unspecified or `true` → end-only (the
+  // current behavior); `false` or `"none"` → no markers.
+  const a = c.arrow
+  let start = false, end = true
+  if (a === false || a === 'none') { start = false; end = false }
+  else if (a === true || a == null || a === 'forward') { start = false; end = true }
+  else if (a === 'reverse') { start = true; end = false }
+  else if (a === 'both') { start = true; end = true }
+  else if (a && typeof a === 'object') { start = !!a.start; end = !!a.end }
+  else throw new Error(`Diagram: unknown arrow "${a}" (use true/false/"forward"/"reverse"/"both"/"none")`)
+  return {
+    start: start ? 'url(#diagram-arrow-start)' : null,
+    end: end ? 'url(#diagram-arrow)' : null,
+  }
 }
 
 function clickDirective(item) {
@@ -166,6 +248,7 @@ const wrapStyle = computed(() => ({
 <svg :viewBox="viewBox.attr" preserveAspectRatio="xMidYMid meet">
 <defs>
 <marker id="diagram-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="currentColor" /></marker>
+<marker id="diagram-arrow-start" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 10 0 L 0 5 L 10 10 Z" fill="currentColor" /></marker>
 </defs>
 <g v-for="g in groups" :key="`g-${g.id}`" v-click="clickDirective(g)" :class="['group', g.style ? `group-${g.style}` : null]">
 <ellipse v-if="g.shape === 'ellipse'" :cx="g.x + g.w / 2" :cy="g.y + g.h / 2" :rx="g.w / 2" :ry="g.h / 2" />
@@ -173,11 +256,11 @@ const wrapStyle = computed(() => ({
 <text v-if="g.text" :x="g.x + g.w / 2" :y="g.y + g.h / 2">{{ g.text }}</text>
 </g>
 <g v-for="(c, i) in connectors" :key="`c-${i}`" v-click="clickDirective(c)" :class="['connector', c.style ? `connector-${c.style}` : null]">
-<path :d="pathFor(c)" :marker-end="c.arrow === false ? null : 'url(#diagram-arrow)'" />
+<path :d="pathFor(c)" :marker-start="arrowMarkers(c).start" :marker-end="arrowMarkers(c).end" />
 </g>
 <g v-for="b in boxes" :key="`b-${b.id}`" v-click="clickDirective(b)" :class="['box', b.style ? `box-${b.style}` : null]">
-<ellipse v-if="b.shape === 'ellipse'" :cx="b.x + b.w / 2" :cy="b.y + b.h / 2" :rx="b.w / 2" :ry="b.h / 2" />
-<rect v-else :x="b.x" :y="b.y" :width="b.w" :height="b.h" :rx="b.rx ?? 3" />
+<ellipse v-if="b.shape === 'ellipse'" :cx="b.x + b.w / 2" :cy="b.y + b.h / 2" :rx="b.w / 2" :ry="b.h / 2" :style="b.fill ? { fill: b.fill } : null" />
+<rect v-else :x="b.x" :y="b.y" :width="b.w" :height="b.h" :rx="b.rx ?? 3" :style="b.fill ? { fill: b.fill } : null" />
 <text v-if="b.text" :x="b.x + b.w / 2" :y="b.y + b.h / 2">{{ b.text }}</text>
 </g>
 </svg>

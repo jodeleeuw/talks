@@ -206,18 +206,23 @@ import spec from './diagrams/my-diagram.json'
       "parent": "frame",          // optional, treat (x, y) as offsets from another box's top-left — see below
       "text": "Input",
       "style": "rnn",             // optional, becomes CSS class `box-rnn` on the <g> element
+      "fill": "#999999",          // optional explicit fill (overrides theme CSS) — see Fills below
       "rx": 3,                    // optional corner radius (default 3 for boxes, 4 for groups)
       "revealAt": 2,              // optional, appear at click N and stay (shorthand for `reveal: { from: N }`)
       "reveal": { "from": 1, "to": 2 }  // optional, visible from click 1 through click 2 — see Reveals below
     }
   ],
   "connectors": [
-    { "from": "input1.top", "to": "emb1.bottom" },                              // straight, both ends snapped
+    { "from": "input1.top", "to": "emb1.bottom" },                              // straight, both ends snapped, default arrow at end
     { "from": "rnn1.top", "to": "attn.left", "route": "VH" },                   // V then H — sharp elbow at (rnn1.x, attn.y)
     { "from": "rnn1.top", "to": "attn.left", "via": [{ "y": "attn.center" }] }, // same elbow via an explicit waypoint
+    { "from": "a.right", "to": "b.top", "outset": 20 },                         // perpendicular leave + perpendicular arrive (PPTX bent4-style)
+    { "from": "node.right", "to": "node.top", "outset": 30 },                   // self-loop on adjacent sides — auto-wraps around the corner
     { "from": [330, 168.1], "to": "rnn1.bottom" },                              // free endpoint as a literal tuple
     { "from": { "snap": "rnn1.top", "dy": 50 }, "to": "data.top" },             // free endpoint as a snap+offset
     { "from": "a.right", "to": "b.left", "style": "highlight", "arrow": false },
+    { "from": "out.top", "to": "in.bottom", "arrow": "reverse" },               // arrow at the start instead — see Arrows below
+    { "from": "a.right", "to": "b.left", "arrow": "both" },                     // arrows at both ends
     { "d": "M 776 168 Q 700 100 600 180", "style": "curve" }                    // raw SVG path — fallback for curves
   ]
 }
@@ -282,6 +287,34 @@ For the common case of a single 90° elbow, `route` skips the explicit waypoint:
 
 Accepted aliases (case-insensitive): `VH` / `vh` / `vertical-horizontal`, `HV` / `hv` / `horizontal-vertical`. `VH` means "leave the start vertically, then turn 90° horizontally to reach the end"; `HV` is the opposite. If both `route` and `via` are set, the route elbow is inserted first, then the via waypoints. Prefer `route` for single-bend connectors and `via` for anything more elaborate.
 
+#### `outset`: perpendicular leave / arrive (and self-loops)
+
+`outset: N` pushes each snapped endpoint **perpendicular to its face** by `N` px before routing kicks in. This matches PowerPoint's bent-connector behavior (every bent4/bent5 in a PPTX leaves and arrives perpendicular to the connected face) and is what makes self-loops on the same shape route cleanly around it.
+
+```jsonc
+// PPTX bentConnector4 ("leave perpendicular, wrap around, arrive perpendicular")
+{ "from": "a.right", "to": "b.top", "outset": 20 }                              // L-bend between the two stubs
+{ "from": "a.right", "to": "b.left", "outset": 20, "via": [{ "x": 500 }] }      // Z-bend, midpoint at x=500
+
+// Asymmetric outsets
+{ "from": "a.right", "to": "b.top", "outset": { "from": 30, "to": 10 } }
+
+// Self-loop on adjacent sides — outset alone, auto-corner around the shape
+{ "from": "node.right", "to": "node.top", "outset": 30 }
+
+// Self-loop on the same side — use snap+dx/dy to spread the endpoints, then outset closes the loop
+{ "from": { "snap": "node.top", "dx": -10 }, "to": { "snap": "node.top", "dx": 10 }, "outset": 30 }
+```
+
+How it works internally:
+
+1. Each snapped endpoint gets a "stub" point pushed perpendicular by its outset value (the side encoded in the snap reference — `top`/`right`/`bottom`/`left` — determines the direction).
+2. `route` / `via` operate **between the stubs**, so any explicit mid-routing sits between the perpendicular approach segments and doesn't disturb them.
+3. **Self-loop auto-corner.** When `from` and `to` snap to the **same shape id** on **perpendicular sides** (e.g. `right` → `top`) and you give no `route`/`via`, the component inserts a single L-corner between the two stubs. The corner lands outside the shape, so the path naturally wraps around it.
+4. Same-side self-loops (e.g. `top` → `top`) need offset endpoints (`{ snap, dx, dy }`) so the start and end aren't the same point. Once the endpoints are spread, the symmetric outset values produce a clean three-segment loop with no extra `via` needed.
+
+When prep.py flags a connector as `**[SELF-LOOP]**` or `**[MULTI-BEND]**` in the analysis, it also suggests the `outset` spec form on the next line — prefer that form over pasting the raw `d="…"` it generated, because snap refs stay coherent when box positions move.
+
 #### When to use raw `d` (escape hatch)
 
 The `d` field is the SVG path `d` attribute — the same `M`/`L`/`H`/`V`/`Q`/`C` mini-language the analysis emits for every connector. Prefer `from`/`to`/`via` for everything orthogonal; reach for `d` only when:
@@ -289,6 +322,37 @@ The `d` field is the SVG path `d` attribute — the same `M`/`L`/`H`/`V`/`Q`/`C`
 - you want to preserve the analysis's suggested `d` verbatim and don't care about anchoring it semantically.
 
 The analysis prints a ready-to-paste `d="…"` for every source connector. Snap when you can (more readable, edits stay coherent if box positions shift), use `d` when you must.
+
+#### Fills
+
+By default a box's fill comes from the theme CSS — usually `var(--slidev-theme-bg, transparent)` so the box reads through the slide background. Set `fill: "#RRGGBB"` on a box to override that with an explicit color. The prep script extracts every `<a:solidFill><a:srgbClr>` from the source PPTX and surfaces it as `fill=#RRGGBB` on the per-shape line in the analysis — copy those values straight into the spec.
+
+```jsonc
+{ "id": "h1", "x": 339, "y": 249, "w": 43, "h": 43, "shape": "ellipse", "fill": "#999999" }
+```
+
+When to use `fill` vs CSS theming:
+
+- **Explicit `fill`** — when the source uses color to encode information that varies per-shape (grayscale activity in neurons, traffic-light status, per-cell highlights). The color belongs to *this shape on this slide*, not to a class of shapes. The fill survives slide-to-slide build-ups: a `text/fill changes on existing shapes` entry in a diff block usually means the author is animating a recolor across clicks (e.g. activations propagating through a network).
+- **CSS class `style:` + `:deep()` rule** — when an entire category of shapes shares a theme color (every `box-rnn` is faint orange). Set `style: "rnn"` on the boxes and theme it once in `<style scoped>`.
+
+Use both together when most shapes follow a category color but a few need to break out: set both `style: "neuron"` (for the stroke/baseline look) and `fill: "#434343"` (for this specific neuron's activity level). The inline `fill` style wins because it's bound as an element style attribute, not a CSS rule.
+
+Schemes / theme color references (`<a:schemeClr>` in PPTX) are deliberately skipped by the extractor — those default to white/dark and would clobber the theme.
+
+#### Arrows
+
+Each connector has an `arrow` field. Accepted values:
+
+| value | renders | notes |
+| --- | --- | --- |
+| omitted / `true` / `"forward"` | arrowhead at the `to` end | default |
+| `false` / `"none"` | no arrowheads | for label ties, brackets, decorative lines |
+| `"reverse"` | arrowhead at the `from` end | flip without rewriting `from`/`to` |
+| `"both"` | arrowheads at both ends | bidirectional / double-headed |
+| `{ start: bool, end: bool }` | explicit booleans | rarely needed |
+
+The prep script reads PowerPoint's `<a:headEnd>` / `<a:tailEnd>` and computes `arrow=forward|reverse|both|none` for every source connector — copy that value straight into the spec when it isn't `forward`.
 
 #### Reveals
 

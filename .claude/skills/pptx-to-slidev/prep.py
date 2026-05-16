@@ -148,6 +148,26 @@ def get_xfrm(elem):
     }
 
 
+def _fill_color(spPr):
+    """Return the shape's explicit sRGB fill as '#RRGGBB', or None.
+
+    Only picks up `<a:solidFill><a:srgbClr val="..."/></a:solidFill>`. Theme
+    color references (`<a:schemeClr>`) are deliberately skipped — those default
+    to white/dark and would clobber the theme's `--slidev-theme-bg`. We only
+    want fills the author chose explicitly (e.g. grayscale activity encoding).
+    """
+    if spPr is None:
+        return None
+    sf = spPr.find("a:solidFill", NS)
+    if sf is None:
+        return None
+    srgb = sf.find("a:srgbClr", NS)
+    if srgb is None:
+        return None
+    val = srgb.attrib.get("val")
+    return f"#{val}" if val else None
+
+
 def _run_format(r):
     """Extract bold/italic/color from a run's rPr. None color = inherits default."""
     rpr = r.find("a:rPr", NS)
@@ -301,13 +321,84 @@ def _classify_kind(prst):
     return prst
 
 
-def _suggest_path(connector, bend_offset=80):
+_SIDE_NORMAL = {
+    "top":    (0, -1),
+    "right":  (1,  0),
+    "bottom": (0,  1),
+    "left":   (-1, 0),
+}
+
+
+def _bent4_path(sx, sy, ex, ey, s_site, e_site, off, fmt):
+    """3-bend path: perpendicular leave, corner, perpendicular arrive.
+
+    Matches PowerPoint's bentConnector4 routing (and is the right shape for
+    same-shape "self-loop" connectors on adjacent sides — the perpendicular
+    stubs naturally wrap around the shape's corner).
+    """
+    s_known = s_site in _SIDE_NORMAL
+    e_known = e_site in _SIDE_NORMAL
+    if not s_known and not e_known:
+        return f"M {fmt(sx)} {fmt(sy)} L {fmt(ex)} {fmt(ey)}"
+
+    # Partial info: one end free, the other snapped — emit a 1-bend path that
+    # arrives perpendicular at the known end. Better than a diagonal, but
+    # without the free end's exit direction we can't draw the full 3-bend wrap.
+    if s_known and not e_known:
+        snx, sny = _SIDE_NORMAL[s_site]
+        s_stub = (sx + snx * off, sy + sny * off)
+        return f"M {fmt(sx)} {fmt(sy)} L {fmt(s_stub[0])} {fmt(s_stub[1])} L {fmt(ex)} {fmt(ey)}"
+    if e_known and not s_known:
+        enx, eny = _SIDE_NORMAL[e_site]
+        e_stub = (ex + enx * off, ey + eny * off)
+        return f"M {fmt(sx)} {fmt(sy)} L {fmt(e_stub[0])} {fmt(e_stub[1])} L {fmt(ex)} {fmt(ey)}"
+
+    snx, sny = _SIDE_NORMAL[s_site]
+    enx, eny = _SIDE_NORMAL[e_site]
+    s_stub = (sx + snx * off, sy + sny * off)
+    e_stub = (ex + enx * off, ey + eny * off)
+    s_horiz = s_site in ("left", "right")
+    e_horiz = e_site in ("left", "right")
+    if s_horiz != e_horiz:
+        # Adjacent sides — single L-bend between the two stubs.
+        corner_x = s_stub[0] if s_horiz else e_stub[0]
+        corner_y = e_stub[1] if s_horiz else s_stub[1]
+        return (
+            f"M {fmt(sx)} {fmt(sy)} "
+            f"L {fmt(s_stub[0])} {fmt(s_stub[1])} "
+            f"L {fmt(corner_x)} {fmt(corner_y)} "
+            f"L {fmt(e_stub[0])} {fmt(e_stub[1])} "
+            f"L {fmt(ex)} {fmt(ey)}"
+        )
+    # Parallel sides — Z-bend through the midpoint between the stubs.
+    if s_horiz:
+        mid_x = (s_stub[0] + e_stub[0]) / 2
+        return (
+            f"M {fmt(sx)} {fmt(sy)} "
+            f"L {fmt(s_stub[0])} {fmt(s_stub[1])} "
+            f"L {fmt(mid_x)} {fmt(s_stub[1])} "
+            f"L {fmt(mid_x)} {fmt(e_stub[1])} "
+            f"L {fmt(e_stub[0])} {fmt(e_stub[1])} "
+            f"L {fmt(ex)} {fmt(ey)}"
+        )
+    mid_y = (s_stub[1] + e_stub[1]) / 2
+    return (
+        f"M {fmt(sx)} {fmt(sy)} "
+        f"L {fmt(s_stub[0])} {fmt(s_stub[1])} "
+        f"L {fmt(s_stub[0])} {fmt(mid_y)} "
+        f"L {fmt(e_stub[0])} {fmt(mid_y)} "
+        f"L {fmt(e_stub[0])} {fmt(e_stub[1])} "
+        f"L {fmt(ex)} {fmt(ey)}"
+    )
+
+
+def _suggest_path(connector, bend_offset=30):
     """Synthesize an SVG `d` string that matches the source routing kind.
 
     Straight connectors → `L`. Bent connectors → orthogonal `H`/`V` segments
     (sharp 90° corners, like PowerPoint draws them). Curved connectors → a
-    quadratic Bézier through the midpoint. Returns None when endpoints are
-    unknown.
+    quadratic Bézier through the midpoint, EXCEPT for self-loops which use the
+    same 3-bend wrap as bent4. Returns None when endpoints are unknown.
     """
     st = connector.get("start") or {}
     en = connector.get("end") or {}
@@ -318,10 +409,18 @@ def _suggest_path(connector, bend_offset=80):
     kind = connector.get("kind", _classify_kind(connector.get("prst", "")))
     s_site = st.get("site")
     e_site = en.get("site")
+    s_id = st.get("shape_id")
+    e_id = en.get("shape_id")
+    self_loop = bool(s_id and s_id == e_id)
 
     def fmt(n):
         # Trim trailing .0 for readability.
         return f"{n:g}"
+
+    # Self-loops always need a wrap path — the diagonal between two sites on
+    # the same shape goes through the shape's interior, which is nonsense.
+    if self_loop and s_site and e_site:
+        return _bent4_path(sx, sy, ex, ey, s_site, e_site, bend_offset, fmt)
 
     if kind == "straight":
         return f"M {fmt(sx)} {fmt(sy)} L {fmt(ex)} {fmt(ey)}"
@@ -357,8 +456,13 @@ def _suggest_path(connector, bend_offset=80):
             return f"M {fmt(sx)} {fmt(sy)} V {fmt(ey)} H {fmt(ex)}"
         return f"M {fmt(sx)} {fmt(sy)} H {fmt(ex)} V {fmt(ey)}"
 
-    # Unknown bent shape (bent4/5, etc.) — straight-line fallback the user can
-    # nudge by hand.
+    if kind in ("bent4", "bent5"):
+        # 3-bend wrap: perpendicular out, sideways, perpendicular in. bent5
+        # technically has 4 bends; we simplify to 3 since the extra middle
+        # segment rarely carries meaning and is fiddly to default well.
+        return _bent4_path(sx, sy, ex, ey, s_site, e_site, bend_offset, fmt)
+
+    # Unknown bent shape — straight-line fallback the user can nudge by hand.
     return f"M {fmt(sx)} {fmt(sy)} L {fmt(ex)} {fmt(ey)}"
 
 
@@ -413,6 +517,7 @@ def parse_slide(zf, slide_path, rels_path):
                 "prst": prst,
                 "bbox": apply_transform(get_xfrm(elem), transform),
                 "text": extract_paragraphs(elem),
+                "fill": _fill_color(spPr),
             }
             shapes.append(shape)
             if sp_id:
@@ -600,6 +705,8 @@ def _shape_pos_key(sh):
     )
 
 
+
+
 def _connector_key(c):
     st = c.get("start") or {}
     en = c.get("end") or {}
@@ -650,7 +757,8 @@ def _diff_by_key(prev_items, curr_items, key_fn):
 def _shape_one_line(sh):
     bb = sh.get("bbox") or {}
     txt = _shape_text(sh)
-    return f"`{sh.get('prst', '?')}` at ({bb.get('x')}, {bb.get('y')}) size {bb.get('w')}×{bb.get('h')}  text={txt!r}"
+    fill_tag = f" fill={sh['fill']}" if sh.get("fill") else ""
+    return f"`{sh.get('prst', '?')}` at ({bb.get('x')}, {bb.get('y')}) size {bb.get('w')}×{bb.get('h')}{fill_tag}  text={txt!r}"
 
 
 def _connector_one_line(c):
@@ -682,7 +790,12 @@ def _emit_diff(L, prev_slide, curr_slide, *, limit=40):
                    if (s.get("bbox") or {}).get("x") is not None]
 
     s_added, s_removed, s_paired = _diff_by_key(prev_shapes, curr_shapes, _shape_pos_key)
-    s_modified = [(p, c) for (p, c) in s_paired if _shape_text(p) != _shape_text(c)]
+    # A "modification" on a stable shape is either a text edit or a recolor
+    # (the grayscale-activity decks rely on the latter for build-ups).
+    s_modified = [
+        (p, c) for (p, c) in s_paired
+        if _shape_text(p) != _shape_text(c) or p.get("fill") != c.get("fill")
+    ]
 
     c_added, c_removed, _ = _diff_by_key(
         prev_slide.get("connectors", []) or [],
@@ -718,12 +831,17 @@ def _emit_diff(L, prev_slide, curr_slide, *, limit=40):
     if s_removed:
         emit_list("removed shapes", s_removed, _shape_one_line)
     if s_modified:
-        L.append(f"- text/content changes on existing shapes ({len(s_modified)}):")
+        L.append(f"- text/fill changes on existing shapes ({len(s_modified)}):")
         for prev_sh, curr_sh in s_modified[:limit]:
             bb = curr_sh.get("bbox") or {}
+            changes = []
+            if _shape_text(prev_sh) != _shape_text(curr_sh):
+                changes.append(f"text {_shape_text(prev_sh)!r} → {_shape_text(curr_sh)!r}")
+            if prev_sh.get("fill") != curr_sh.get("fill"):
+                changes.append(f"fill {prev_sh.get('fill') or '(none)'} → {curr_sh.get('fill') or '(none)'}")
             L.append(
                 f"  - `{curr_sh.get('prst', '?')}` at ({bb.get('x')}, {bb.get('y')}): "
-                f"{_shape_text(prev_sh)!r} → {_shape_text(curr_sh)!r}"
+                + "; ".join(changes)
             )
         if len(s_modified) > limit:
             L.append(f"  - … and {len(s_modified) - limit} more")
@@ -813,8 +931,9 @@ def write_summary(path, analysis):
             txt = " | ".join(p["text"] for p in sh.get("text", []))
             sid = sh.get("id")
             id_tag = f"#{sid} " if sid else ""
+            fill_tag = f" fill={sh['fill']}" if sh.get("fill") else ""
             shape_lines.append(
-                f"- {id_tag}`{sh.get('prst', '?')}` at ({bb.get('x')}, {bb.get('y')}) size {bb.get('w')}×{bb.get('h')}  text={txt!r}"
+                f"- {id_tag}`{sh.get('prst', '?')}` at ({bb.get('x')}, {bb.get('y')}) size {bb.get('w')}×{bb.get('h')}{fill_tag}  text={txt!r}"
             )
         if shape_lines:
             L.append("")
@@ -835,9 +954,26 @@ def write_summary(path, analysis):
                 snap = "snapped" if c.get("snapped") else "loose"
                 kind = c.get("kind", "?")
                 d_attr = c.get("path") or ""
+                s_id, e_id = st.get("shape_id"), en.get("shape_id")
+                self_loop = bool(s_id and s_id == e_id)
+                tags = []
+                if self_loop:
+                    tags.append("SELF-LOOP")
+                if kind in ("bent4", "bent5"):
+                    tags.append("MULTI-BEND")
+                tag_str = f" **[{', '.join(tags)}]**" if tags else ""
                 L.append(
-                    f"- `{c.get('prst', '?')}` (kind={kind}, {snap}, arrow={c.get('arrow')}): {anchor_s} {glyph} {anchor_e}"
+                    f"- `{c.get('prst', '?')}` (kind={kind}, {snap}, arrow={c.get('arrow')}): {anchor_s} {glyph} {anchor_e}{tag_str}"
                 )
+                if (self_loop or kind in ("bent4", "bent5")) and st.get("site") and en.get("site"):
+                    # Prefer the high-level spec form for these — `outset` plus
+                    # snap refs survives box-position edits, raw `d` doesn't.
+                    arrow = c.get("arrow", "forward")
+                    arrow_field = "" if arrow == "forward" else f", \"arrow\": \"{arrow}\""
+                    L.append(
+                        f"  - spec form: `{{ \"from\": \"<id>.{st.get('site')}\", \"to\": \"<id>.{en.get('site')}\", \"outset\": 30{arrow_field} }}` "
+                        f"(use real ids; tune `outset` to taste)"
+                    )
                 if d_attr:
                     L.append(f"  - `d=\"{d_attr}\"`")
 
@@ -856,6 +992,43 @@ def write_summary(path, analysis):
 
     with open(path, "w") as f:
         f.write("\n".join(L))
+
+
+def _adjust_template_paths(dest_dir, repo):
+    """Rewrite `_shared/`-relative paths in the copied template for the
+    destination's actual depth from the repo root.
+
+    The template's `components/Diagram.vue` and `vite.config.ts` assume the
+    talk dir sits one level below the repo root (`<repo>/<talk>/`). When a
+    talk gets scaffolded somewhere deeper (e.g. `<repo>/tmp_talks/<talk>/`),
+    `../../_shared/...` no longer resolves — we patch the references so they
+    reach the actual `_shared/` location.
+    """
+    rel = os.path.relpath(dest_dir, repo)
+    depth = len([p for p in rel.split(os.sep) if p and p != "."])
+    if depth <= 1:
+        return  # template was written for depth=1; nothing to adjust
+
+    # components/Diagram.vue lives one level deeper than the talk dir, so the
+    # import string needs (depth + 1) "../" segments to reach the repo root.
+    diagram_vue = os.path.join(dest_dir, "components", "Diagram.vue")
+    if os.path.isfile(diagram_vue):
+        with open(diagram_vue) as f:
+            content = f.read()
+        new_rel = "/".join([".."] * (depth + 1)) + "/_shared/diagram/Diagram.vue"
+        content = content.replace("../../_shared/diagram/Diagram.vue", new_rel)
+        with open(diagram_vue, "w") as f:
+            f.write(content)
+
+    # vite.config.ts uses resolve(__dirname, '..') — needs `depth` "..` parts.
+    vite_cfg = os.path.join(dest_dir, "vite.config.ts")
+    if os.path.isfile(vite_cfg):
+        with open(vite_cfg) as f:
+            content = f.read()
+        dots = ", ".join(["'..'"] * depth)
+        content = content.replace("resolve(__dirname, '..')", f"resolve(__dirname, {dots})")
+        with open(vite_cfg, "w") as f:
+            f.write(content)
 
 
 def main():
@@ -886,6 +1059,7 @@ def main():
         sys.exit(2)
 
     shutil.copytree(template, dest_dir)
+    _adjust_template_paths(dest_dir, repo)
 
     with zipfile.ZipFile(pptx_path) as zf:
         deck_w, deck_h = get_deck_size(parse_xml(zf, "ppt/presentation.xml"))
