@@ -1,0 +1,32 @@
+{
+  "name": "slidev-theme-josh",
+  "version": "0.1.0",
+  "description": "Minimal warm-dark theme for Josh's talks.",
+  "private": true,
+  "keywords": [
+    "slidev-theme",
+    "slidev"
+  ],
+  "engines": {
+    "slidev": ">=0.48.0"
+  },
+  "slidev": {
+    "colorSchema": "dark",
+    "defaults": {
+      "highlighter": "shiki",
+      "fonts": {
+        "sans": "Inter",
+        "serif": "Fraunces",
+        "mono": "JetBrains Mono",
+        "weights": "300,400,500,600,700",
+        "italic": true
+      },
+      "themeConfig": {
+        "initials": "jdl",
+        "course": "",
+        "event": "",
+        "date": ""
+      }
+    }
+  }
+}
