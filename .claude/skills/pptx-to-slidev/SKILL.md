@@ -26,13 +26,22 @@ python3 .claude/skills/pptx-to-slidev/prep.py <PATH_TO_PPTX> [--output <talk-dir
 
 The script will:
 
-1. Copy `template/` to `<repo>/<output>/` (slides.md, package.json, `vite.config.ts`, `components/Diagram.vue`, an empty `diagrams/` dir). **Fails if the dir already exists** — ask the user before clobbering.
+1. Copy `template/` to `<repo>/<output>/` (slides.md, package.json, `vite.config.ts`, `components/Diagram.vue`, an empty `diagrams/` dir). `node_modules/`, `dist/`, and `package-lock.json` are deliberately excluded — copying `node_modules` is slow *and* corrupts symlinks. **Run `npm install` once in the new dir before `npx slidev build`.** Fails if the dir already exists — ask the user before clobbering.
 2. Extract every image from `ppt/media/` into the new dir (co-located with `slides.md`, **not** in `public/`).
-3. Parse each slide and write `_analysis.json` + `_analysis.md` into the new dir.
+3. Copy any `<pptx-stem>.thumbnails/slide-N.png` files (produced by `google-slides-export`) into `<dest>/_thumbnails/` and reference them in the analysis.
+4. Parse each slide and write `_analysis.json` + `_analysis.md` into the new dir.
 
-After the script runs, **read `_analysis.md`** end-to-end, then design and write `slides.md`. Delete `_analysis.json` and `_analysis.md` once you're done with them.
+After the script runs, **read `_analysis.md`** end-to-end **and read the per-slide `_thumbnails/slide-N.png` for any slide that's non-trivial** — the PNG shows you what raw coordinates can't. Delete `_analysis.json`, `_analysis.md`, and `_thumbnails/` once you're done with them.
 
 The `vite.config.ts` extends Vite's `server.fs.allow` to include the repo root so the deck can import the shared `_shared/diagram/Diagram.vue`. The `components/Diagram.vue` wrapper auto-registers `<Diagram>` globally for every slide via Slidev's `components/` auto-import.
+
+### Source thumbnails
+
+`google-slides-export` (run *before* this skill when the source is a Slides URL) calls the Slides API's `presentations.pages.getThumbnail` once per slide and saves PNGs to `<pptx-stem>.thumbnails/slide-N.png`. `prep.py` then copies them into the new talk's `_thumbnails/` directory and adds a `**Source:**` line under every slide in `_analysis.md`.
+
+**Always open the thumbnail before writing a non-trivial slide.** The geometry/text dump tells you what's on the slide; the PNG tells you what it *looks like* (color groupings, visual hierarchy, whether two boxes form a pair, whether an arrow is decorative or load-bearing). For pure-text slides you can usually skip the PNG.
+
+If thumbnails aren't present (local PPTX with no Slides URL, or `--no-thumbnails` was passed), you're flying blind — flag that to the user before guessing at complex layouts.
 
 ## Writing slides.md from the analysis
 
@@ -204,7 +213,8 @@ import spec from './diagrams/my-diagram.json'
       "x": 200, "y": 270, "w": 100, "h": 44,  // pixel coords in the viewBox space — copy straight from the analysis
       "anchor": "top-left",       // optional, where (x, y) sits on the box — see below (default: top-left)
       "parent": "frame",          // optional, treat (x, y) as offsets from another box's top-left — see below
-      "text": "Input",
+      "text": "Input",            // single line — or use `lines` / `"a\nb"` for multi-line, see "Text" below
+      "lines": ["Input", "(US)"], // optional — array form for multi-line; takes precedence over `text`
       "style": "rnn",             // optional, becomes CSS class `box-rnn` on the <g> element
       "fill": "#999999",          // optional explicit fill (overrides theme CSS) — see Fills below
       "rx": 3,                    // optional corner radius (default 3 for boxes, 4 for groups)
@@ -323,6 +333,38 @@ The `d` field is the SVG path `d` attribute — the same `M`/`L`/`H`/`V`/`Q`/`C`
 
 The analysis prints a ready-to-paste `d="…"` for every source connector. Snap when you can (more readable, edits stay coherent if box positions shift), use `d` when you must.
 
+#### Text (single line, multi-line, line-wrapping)
+
+`text` defaults to a single line. For multi-line text in a box or group:
+
+```jsonc
+{ "text": "Line 1\nLine 2" }                   // newlines inside a single string
+{ "text": ["Line 1", "Line 2"] }               // array form
+{ "lines": ["Line 1", "Line 2"], "text": "" }  // explicit `lines` (takes precedence)
+```
+
+All three render as multiple `<tspan>`s vertically centered around the box's center, with 1.2em line height. There's no automatic word-wrapping — pick line breaks deliberately. Don't paste the analysis's ` | `-joined string as-is into `text:`; that renders the `|` literally. Split into lines instead.
+
+The analysis prints multi-paragraph shape text joined with ` | ` for readability. When converting that to a spec, copy each paragraph as its own `lines[]` entry.
+
+#### Fit modes (`fit` prop)
+
+By default the `<Diagram>` wrapper locks itself to the spec's `w / h` aspect ratio. Width comes from the parent; height is computed. That works when the diagram is the only content on the slide, but on a slide with a title / paragraph / footer above and below, a 16:9 spec is taller than the available area and the bottom rows get clipped.
+
+Pass `fit="container"` to switch the wrapper to `width: 100% / height: 100%` and let the SVG's `preserveAspectRatio="xMidYMid meet"` scale the drawing inside the available bounds. The parent must constrain height — put the `<Diagram>` inside a flex-1 wrapper:
+
+```md
+<div class="diagram-wrap">
+  <Diagram class="my-diagram" fit="container" :spec="spec" />
+</div>
+
+<style scoped>
+.diagram-wrap { flex: 1 1 0; min-height: 0; display: flex; justify-content: center; }
+</style>
+```
+
+Default (`fit="aspect"`) is fine when the diagram *is* the slide — no title above. Use `fit="container"` whenever you wrap the diagram with a heading or trailing caption.
+
 #### Fills
 
 By default a box's fill comes from the theme CSS — usually `var(--slidev-theme-bg, transparent)` so the box reads through the slide background. Set `fill: "#RRGGBB"` on a box to override that with an explicit color. The prep script extracts every `<a:solidFill><a:srgbClr>` from the source PPTX and surfaces it as `fill=#RRGGBB` on the per-shape line in the analysis — copy those values straight into the spec.
@@ -385,15 +427,41 @@ The component bakes in: `currentColor` strokes, transparent fill defaulting to `
 
 `:deep()` is required because the slide's scoped CSS can't reach inside the Diagram component otherwise. The class on each generated element is `box-<style>`, `group-<style>`, or `connector-<style>` — pick semantic `style` values in the spec (`rnn`, `attention`, `label`, `callout`, `arc`, `highlight`, …) so the CSS reads.
 
-#### When to fall back to inline SVG
+#### When to give up on `<Diagram>` (and just use the source PNG)
 
-The Diagram component covers boxes-and-connectors with single-line text. Fall back to inline SVG / HTML when a slide needs:
-- multi-line or mixed-formatting text inside boxes (the component renders text as `<text>`, not foreignObject),
-- non-rectangular shapes (circles, polygons, freeform),
-- per-element text alignment that isn't centered,
-- tweened motion between clicks.
+The component is great for **graph-shaped** diagrams: 5–15 labeled boxes connected by snap-routed arrows, where the spatial arrangement matters but the visual style doesn't. It's *not* the right tool for everything in the deck. Bail and use the source PNG as an `<img>` when:
 
-These cases are rare. Try the component first.
+- The diagram has **more than ~15 shapes** and you're scaffolding from scratch — the JSON authoring cost dominates.
+- The source uses **decorative imagery as load-bearing content** (the reduction ladder has hand-drawn animal silhouettes next to each "scale" label; the cognitive-mapping deck has a brain with arrows pointing into specific regions). Recreating those in SVG loses the point.
+- The source is **rasterized SmartArt / Visio / clipart** that came across as one `image*.png`. Don't try to reverse-engineer it; just place the image.
+- The diagram has **mixed-formatting or rich text inside boxes** (bold + color within one label, equations, code) that won't survive the `<text>` element.
+- The shapes are **non-rectangular** (organic curves, polygons, freeform) and `shape: "ellipse"` isn't enough.
+
+**Preferred fallback: use the source thumbnail.** Every slide has a PNG in `_thumbnails/slide-N.png` (when `google-slides-export` produced them). For a "just show the diagram" slide:
+
+```md
+---
+layout: image
+image: ./_thumbnails/slide-11.png
+fit: contain
+---
+
+# The neural circuit
+```
+
+(or use `<img src="./_thumbnails/slide-11.png" />` in a custom layout if you want text alongside).
+
+Caveat: thumbnails are 1600×900 PNGs that bake in the source theme — fine for content slides but won't match your Slidev theme. So use the thumbnail when fidelity matters more than theming. For diagrams you *want* themed, do the `<Diagram>` work.
+
+**Secondary fallback: inline SVG / HTML.** Drop into raw markup when you need partial-Diagram + something exotic (tweened motion, gradients, multi-line foreignObject text). Most cases get covered by Diagram + thumbnails + image layouts; inline SVG is rare.
+
+#### Known `<Diagram>` limitations
+
+Things the component does not (yet) do — work around with the strategies above:
+
+- **No obstacle avoidance.** A connector from A.right to C.left will draw straight through anything in between (e.g. a box B sitting on that line). Either route around with `via`/`route`, or move B, or accept the crossing.
+- **No automatic text wrapping.** Long single-line text overflows its box. Either widen the box, use `lines:` to break it manually, or shorten the label.
+- **No animations between two states of the same element.** If a box needs to move or resize across clicks, declare two boxes with complementary `reveal` ranges (no built-in tween).
 
 ### When to use Mermaid instead
 
@@ -411,11 +479,49 @@ Two fixes (either works): strip the indentation so no child line starts with 4+ 
 
 Default to `<Diagram :spec="…" />` and you'll never hit this.
 
+### Gotcha: YAML reserved characters in frontmatter values
+
+Slide frontmatter is YAML, so layout props that look like single punctuation marks need quoting or they get reinterpreted. The one that bites in this repo is the `outro` layout's `mark` prop: `mark: ?` parses as a complex-mapping-key indicator and arrives at the component as `undefined` (the layout silently falls back to its default `?`). Write `mark: '?'` instead.
+
+Same applies to any value that starts with one of YAML's flow indicators: `?`, `:`, `,`, `[`, `]`, `{`, `}`, `&`, `*`, `!`, `|`, `>`, `%`, `@`, `` ` ``, or a leading `-`. When in doubt, quote.
+
 ### Images
 
 Images live alongside `slides.md` after the prep script runs. Reference them with a **relative** path: `<img src="./image1.png" />` or `![](./image1.png)`.
 
 Slidev's build will fail with `Import "/foo.png" from slide Markdown resolves outside of Vite server.fs.allow` if you use an absolute `/foo.png` path. **Do not** move images into `public/` — that's the path that triggers the error.
+
+### Videos
+
+Google's PPTX export silently flattens every embedded video into a static thumbnail picture — the URL, source, and playback settings are gone. To preserve them, the `google-slides-export` skill writes a `<deck>.videos.json` sidecar alongside the PPTX whenever it sees video elements; `prep.py` reads it automatically and surfaces a `**Videos:**` block on every affected slide, plus a `⚠ video placeholder` tag on the picture that should be replaced.
+
+In `slides.md`, embed the video in place of the placeholder picture:
+
+```md
+<!-- YouTube -->
+<Youtube id="dQw4w9WgXcQ" width="480" height="270" />
+
+<!-- or plain iframe (works on both Slidev and a static SPA build) -->
+<iframe
+  src="https://www.youtube.com/embed/dQw4w9WgXcQ"
+  width="480" height="270"
+  frameborder="0"
+  allow="autoplay; encrypted-media; picture-in-picture"
+  allowfullscreen
+></iframe>
+
+<!-- Drive videos -->
+<iframe
+  src="https://drive.google.com/file/d/<FILE_ID>/preview"
+  width="480" height="270"
+  allow="autoplay"
+  allowfullscreen
+></iframe>
+```
+
+Position the embed using the sidecar's bbox (in deck px) — typically inside a positioned container so it lands where the thumbnail used to. The placeholder picture itself should be left out of the converted slide entirely; the analysis's `⚠ video placeholder` tag tells you which `image*.png` to skip.
+
+If the user only has a PPTX (no Slides URL / no sidecar), the original video is unrecoverable from the file alone — ask them for the URL.
 
 ## Notes for the assistant
 

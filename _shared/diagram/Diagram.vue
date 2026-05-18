@@ -3,6 +3,13 @@ import { computed } from 'vue'
 
 const props = defineProps({
   spec: { type: Object, required: true },
+  // 'aspect' (default): wrapper locks itself to the spec's w/h aspect ratio
+  // (current behavior — width: 100% drives height). 'container': wrapper
+  // takes 100% × 100% of its parent and the SVG's preserveAspectRatio scales
+  // the drawing to fit. Use 'container' when a sized flex/grid cell or a
+  // height: <X>rem wrapper is providing the bounds and the default 16:9 would
+  // overflow underneath a slide title or footer.
+  fit: { type: String, default: 'aspect' },
 })
 
 const viewBox = computed(() => {
@@ -238,13 +245,37 @@ function clickDirective(item) {
   return false
 }
 
-const wrapStyle = computed(() => ({
-  aspectRatio: `${viewBox.value.w} / ${viewBox.value.h}`,
-}))
+// Multi-line text. Author can write either `lines: ["a", "b"]`, `text: ["a", "b"]`,
+// or `text: "a\nb"` — all become an array of strings. Single-string text returns
+// `[text]`. `null`/`undefined`/empty returns `[]` (text node is then skipped).
+function textLines(item) {
+  if (Array.isArray(item.lines)) return item.lines.filter(s => s != null)
+  if (Array.isArray(item.text)) return item.text.filter(s => s != null)
+  if (typeof item.text === 'string') {
+    if (!item.text) return []
+    return item.text.split('\n')
+  }
+  return []
+}
+
+// First-tspan dy that centers a block of N lines on the wrapper's y coordinate.
+// dominant-baseline: middle puts each tspan's middle at its (x, y+dy). For an
+// odd count (1, 3, …) the middle line sits on y; for an even count (2, 4, …)
+// the centerline sits between two tspans.
+function firstDy(n) {
+  if (n <= 1) return 0
+  return `${-((n - 1) / 2) * 1.2}em`
+}
+
+const wrapStyle = computed(() => {
+  if (props.fit === 'container') return null
+  // 'aspect' (default): lock wrapper to spec's aspect ratio so width drives height.
+  return { aspectRatio: `${viewBox.value.w} / ${viewBox.value.h}` }
+})
 </script>
 
 <template>
-<div class="diagram" :style="wrapStyle">
+<div class="diagram" :class="`diagram--fit-${fit}`" :style="wrapStyle">
 <svg :viewBox="viewBox.attr" preserveAspectRatio="xMidYMid meet">
 <defs>
 <marker id="diagram-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="currentColor" /></marker>
@@ -253,7 +284,9 @@ const wrapStyle = computed(() => ({
 <g v-for="g in groups" :key="`g-${g.id}`" v-click="clickDirective(g)" :class="['group', g.style ? `group-${g.style}` : null]">
 <ellipse v-if="g.shape === 'ellipse'" :cx="g.x + g.w / 2" :cy="g.y + g.h / 2" :rx="g.w / 2" :ry="g.h / 2" />
 <rect v-else :x="g.x" :y="g.y" :width="g.w" :height="g.h" :rx="g.rx ?? 4" />
-<text v-if="g.text" :x="g.x + g.w / 2" :y="g.y + g.h / 2">{{ g.text }}</text>
+<text v-if="textLines(g).length" :x="g.x + g.w / 2" :y="g.y + g.h / 2">
+<tspan v-for="(line, i) in textLines(g)" :key="i" :x="g.x + g.w / 2" :dy="i === 0 ? firstDy(textLines(g).length) : '1.2em'">{{ line }}</tspan>
+</text>
 </g>
 <g v-for="(c, i) in connectors" :key="`c-${i}`" v-click="clickDirective(c)" :class="['connector', c.style ? `connector-${c.style}` : null]">
 <path :d="pathFor(c)" :marker-start="arrowMarkers(c).start" :marker-end="arrowMarkers(c).end" />
@@ -261,7 +294,9 @@ const wrapStyle = computed(() => ({
 <g v-for="b in boxes" :key="`b-${b.id}`" v-click="clickDirective(b)" :class="['box', b.style ? `box-${b.style}` : null]">
 <ellipse v-if="b.shape === 'ellipse'" :cx="b.x + b.w / 2" :cy="b.y + b.h / 2" :rx="b.w / 2" :ry="b.h / 2" :style="b.fill ? { fill: b.fill } : null" />
 <rect v-else :x="b.x" :y="b.y" :width="b.w" :height="b.h" :rx="b.rx ?? 3" :style="b.fill ? { fill: b.fill } : null" />
-<text v-if="b.text" :x="b.x + b.w / 2" :y="b.y + b.h / 2">{{ b.text }}</text>
+<text v-if="textLines(b).length" :x="b.x + b.w / 2" :y="b.y + b.h / 2">
+<tspan v-for="(line, i) in textLines(b)" :key="i" :x="b.x + b.w / 2" :dy="i === 0 ? firstDy(textLines(b).length) : '1.2em'">{{ line }}</tspan>
+</text>
 </g>
 </svg>
 </div>
@@ -269,6 +304,10 @@ const wrapStyle = computed(() => ({
 
 <style scoped>
 .diagram { width: 100%; }
+/* fit=container: take 100% of the parent's height. Parent must constrain it
+   (e.g. a flex column with min-height: 0, or an explicit height). The SVG's
+   preserveAspectRatio="xMidYMid meet" scales the drawing to fit. */
+.diagram--fit-container { height: 100%; min-height: 0; min-width: 0; }
 .diagram svg { width: 100%; height: 100%; display: block; }
 .diagram text {
   fill: currentColor;

@@ -597,6 +597,81 @@ def parse_slide(zf, slide_path, rels_path):
     }
 
 
+def copy_thumbnails(pptx_path, dest_dir):
+    """Copy `<pptx-stem>.thumbnails/slide-N.png` into `<dest_dir>/_thumbnails/`.
+
+    The thumbnails directory is produced by `google-slides-export` (Slides API
+    server-side render) — having a PNG of each source slide lets Claude *see*
+    the slide instead of inferring layout from raw coordinates. Returns a
+    dict `{slide_index: relative_path_from_dest_dir}` for everything copied;
+    empty dict if no thumbnails source is found.
+    """
+    src_dir = os.path.splitext(pptx_path)[0] + ".thumbnails"
+    if not os.path.isdir(src_dir):
+        return {}
+    dest_sub = os.path.join(dest_dir, "_thumbnails")
+    os.makedirs(dest_sub, exist_ok=True)
+    out = {}
+    for name in sorted(os.listdir(src_dir)):
+        m = re.match(r"slide-(\d+)\.png$", name)
+        if not m:
+            continue
+        idx = int(m.group(1))
+        shutil.copyfile(os.path.join(src_dir, name), os.path.join(dest_sub, name))
+        out[idx] = f"./_thumbnails/{name}"
+    return out
+
+
+def load_videos_sidecar(pptx_path):
+    """Return `{slide_index: [video, ...]}` from `<pptx-stem>.videos.json`.
+
+    The sidecar is produced by `google-slides-export`'s Slides-API pass and
+    recovers videos that PPTX export silently flattens to thumbnails. Missing
+    sidecar is fine — returns an empty dict.
+    """
+    sidecar_path = os.path.splitext(pptx_path)[0] + ".videos.json"
+    if not os.path.isfile(sidecar_path):
+        return {}
+    try:
+        with open(sidecar_path) as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError) as e:
+        sys.stderr.write(f"Warning: could not read {sidecar_path}: {e}\n")
+        return {}
+    return {s["index"]: s.get("videos", []) for s in data.get("slides", [])}
+
+
+def _bbox_near(a, b, tol=5.0):
+    """True if two bboxes (`{x,y,w,h}`) line up within `tol` px on every edge."""
+    if not a or not b or a.get("x") is None or b.get("x") is None:
+        return False
+    return (
+        abs(a["x"] - b["x"]) < tol
+        and abs(a["y"] - b["y"]) < tol
+        and abs(a["w"] - b["w"]) < tol
+        and abs(a["h"] - b["h"]) < tol
+    )
+
+
+def annotate_video_thumbnails(slide):
+    """Flag pictures that overlap a video's bbox as the video's static thumbnail.
+
+    Google's PPTX export drops the video and inserts a placeholder picture at
+    the same position. Marking those pictures lets Claude skip them when
+    rendering the slide — the `<video>` / iframe / `<Youtube>` embed should
+    take their place.
+    """
+    videos = slide.get("videos") or []
+    if not videos:
+        return
+    for pic in slide.get("pictures") or []:
+        pb = pic.get("bbox") or {}
+        for v in videos:
+            if _bbox_near(pb, v.get("bbox")):
+                pic["video_placeholder"] = True
+                break
+
+
 def parse_notes(zf, notes_path):
     """Extract speaker notes, filtering out the slide-number placeholder."""
     root = parse_xml(zf, notes_path)
@@ -876,8 +951,22 @@ def write_summary(path, analysis):
     prev_sig = None
     prev_index = None
     prev_slide = None
+    if analysis.get("thumbnails_dir"):
+        L.append(
+            f"> 🖼  **Source thumbnails available**: every slide entry has a "
+            f"`**Source:**` line pointing at a PNG render from "
+            f"`{analysis['thumbnails_dir']}/`. **Read the PNG** before writing "
+            f"the slide — it's the cheapest way to see what the original "
+            f"actually looks like."
+        )
+        L.append("")
+
     for s in analysis["slides"]:
         L.append(f"## Slide {s['index']}")
+
+        if s.get("thumbnail"):
+            L.append("")
+            L.append(f"**Source:** `{s['thumbnail']}` — read this PNG first.")
 
         plain = _slide_plain_text(s)
         sig = _slide_format_signature(s)
@@ -921,7 +1010,42 @@ def write_summary(path, analysis):
             L.append("**Pictures:**")
             for pic in pics:
                 bb = pic.get("bbox") or {}
-                L.append(f"- `{pic.get('file', '?')}` at ({bb.get('x')}, {bb.get('y')}) size {bb.get('w')}×{bb.get('h')}")
+                placeholder_tag = (
+                    "  ⚠ **video placeholder** — skip this picture and embed the matching video below instead"
+                    if pic.get("video_placeholder") else ""
+                )
+                L.append(
+                    f"- `{pic.get('file', '?')}` at ({bb.get('x')}, {bb.get('y')}) "
+                    f"size {bb.get('w')}×{bb.get('h')}{placeholder_tag}"
+                )
+
+        vids = s.get("videos") or []
+        if vids:
+            L.append("")
+            L.append("**Videos** (recovered from Slides API — PPTX export dropped these):")
+            for v in vids:
+                bb = v.get("bbox") or {}
+                src = v.get("source") or "?"
+                flags = []
+                if v.get("autoplay"):
+                    flags.append("autoplay")
+                if v.get("mute"):
+                    flags.append("muted")
+                if v.get("start_seconds"):
+                    flags.append(f"start={v['start_seconds']}s")
+                if v.get("end_seconds"):
+                    flags.append(f"end={v['end_seconds']}s")
+                flag_str = f" [{', '.join(flags)}]" if flags else ""
+                L.append(
+                    f"- {src} `{v.get('url', '')}` at ({bb.get('x')}, {bb.get('y')}) "
+                    f"size {bb.get('w')}×{bb.get('h')}{flag_str}"
+                )
+            L.append(
+                "  - YouTube → `<Youtube id=\"...\" />` or an `<iframe>` to "
+                "`https://www.youtube.com/embed/<id>`. "
+                "Drive → `<iframe src=\"https://drive.google.com/file/d/<id>/preview\" allow=\"autoplay\" />`. "
+                "Position the embed where the placeholder picture was."
+            )
 
         shape_lines = []
         for sh in s.get("shapes", []):
@@ -984,7 +1108,7 @@ def write_summary(path, analysis):
             for line in notes.split("\n"):
                 L.append(f"> {line}")
 
-        if not (text_paras or pics or shape_lines or cxns or notes):
+        if not (text_paras or pics or shape_lines or cxns or notes or vids):
             L.append("")
             L.append("_(blank — likely a section divider)_")
 
@@ -1030,6 +1154,20 @@ def _adjust_template_paths(dest_dir, repo):
         with open(vite_cfg, "w") as f:
             f.write(content)
 
+    # slides.md headmatter declares `theme: ../_shared/theme-josh` (depth=1).
+    # Bump the prefix to match this deck's depth.
+    slides_md = os.path.join(dest_dir, "slides.md")
+    if os.path.isfile(slides_md):
+        with open(slides_md) as f:
+            content = f.read()
+        new_prefix = "/".join([".."] * depth)
+        content = content.replace(
+            "theme: ../_shared/theme-josh",
+            f"theme: {new_prefix}/_shared/theme-josh",
+        )
+        with open(slides_md, "w") as f:
+            f.write(content)
+
 
 def main():
     ap = argparse.ArgumentParser(description="Prep a PPTX for Slidev conversion.")
@@ -1058,7 +1196,16 @@ def main():
         sys.stderr.write("Remove it or pass a different --output.\n")
         sys.exit(2)
 
-    shutil.copytree(template, dest_dir)
+    # template/ has a populated node_modules from the user's normal workflow;
+    # copying it is slow (~500 MB) and corrupts the .bin/ symlinks, which then
+    # breaks `npm run build`. Ignore it (and other generated dirs) and let the
+    # user install fresh in the new talk dir.
+    shutil.copytree(
+        template, dest_dir,
+        ignore=shutil.ignore_patterns(
+            "node_modules", "dist", ".DS_Store", "package-lock.json",
+        ),
+    )
     _adjust_template_paths(dest_dir, repo)
 
     with zipfile.ZipFile(pptx_path) as zf:
@@ -1078,6 +1225,8 @@ def main():
                 shutil.copyfileobj(src, dst)
             extracted_images.append(fname)
 
+        videos_by_slide = load_videos_sidecar(pptx_path)
+        thumbnails_by_slide = copy_thumbnails(pptx_path, dest_dir)
         slides = []
         for sname in slide_names:
             idx = int(re.search(r"slide(\d+)\.xml$", sname).group(1))
@@ -1085,12 +1234,16 @@ def main():
             data = parse_slide(zf, sname, rels_path)
             data["notes"] = parse_notes(zf, f"ppt/notesSlides/notesSlide{idx}.xml")
             data["index"] = idx
+            data["videos"] = videos_by_slide.get(idx, [])
+            data["thumbnail"] = thumbnails_by_slide.get(idx)
+            annotate_video_thumbnails(data)
             slides.append(data)
 
     analysis = {
         "pptx": os.path.basename(pptx_path),
         "deck_size": {"w": deck_w, "h": deck_h},
         "extracted_images": extracted_images,
+        "thumbnails_dir": "./_thumbnails" if thumbnails_by_slide else None,
         "slides": slides,
     }
     json_path = os.path.join(dest_dir, "_analysis.json")
@@ -1102,6 +1255,8 @@ def main():
     print(f"Scaffolded: {dest_dir}")
     print(f"  Slides parsed:    {len(slides)}")
     print(f"  Images extracted: {len(extracted_images)}")
+    if thumbnails_by_slide:
+        print(f"  Slide thumbnails: {len(thumbnails_by_slide)} (in ./_thumbnails/)")
     print(f"  Deck size:        {deck_w} × {deck_h} px")
     print(f"  Read next:        {os.path.relpath(md_path, os.getcwd())}")
 
