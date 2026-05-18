@@ -1,27 +1,25 @@
 <script setup lang="ts">
+import { useSlots } from 'vue'
 import FitContent from '../components/FitContent.vue'
 
 withDefaults(defineProps<{
-  image: string
-  alt?: string
   side?: 'left' | 'right'
-  fit?: 'cover' | 'contain'
   bleed?: boolean
   caption?: string
 }>(), {
   side: 'right',
-  fit: 'cover',
   bleed: false,
-  alt: '',
 })
+
+const slots = useSlots()
 </script>
 
 <template>
   <div
-    class="slidev-layout josh-photo"
+    class="slidev-layout josh-media"
     :class="[`side-${side}`, bleed ? 'bleed' : 'padded']"
   >
-    <div class="photo-text">
+    <div class="media-text">
       <FitContent align="center" origin="left center">
         <div class="text-inner">
           <slot />
@@ -29,15 +27,17 @@ withDefaults(defineProps<{
       </FitContent>
     </div>
 
-    <div class="photo-media" :style="{ '--fit': fit }">
-      <img :src="image" :alt="alt" />
-      <div v-if="caption" class="photo-caption">{{ caption }}</div>
+    <div class="media-column">
+      <div class="media-frame">
+        <slot v-if="slots.media" name="media" />
+      </div>
+      <div v-if="caption" class="media-caption">{{ caption }}</div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.josh-photo {
+.josh-media {
   display: grid;
   grid-template-columns: 1fr 1.15fr;
   gap: 3rem;
@@ -45,25 +45,25 @@ withDefaults(defineProps<{
   overflow: hidden;
 }
 
-.josh-photo.padded {
+.josh-media.padded {
   padding: 3rem 4rem 3.5rem;
 }
 
-.josh-photo.bleed {
+.josh-media.bleed {
   padding: 3rem 0 3.5rem 4rem;
   gap: 3.5rem;
 }
 
-.josh-photo.side-left {
+.josh-media.side-left {
   grid-template-columns: 1.15fr 1fr;
 }
-.josh-photo.side-left .photo-text { order: 2; }
-.josh-photo.side-left .photo-media { order: 1; }
-.josh-photo.side-left.bleed {
+.josh-media.side-left .media-text { order: 2; }
+.josh-media.side-left .media-column { order: 1; }
+.josh-media.side-left.bleed {
   padding: 3rem 4rem 3.5rem 0;
 }
 
-.photo-text {
+.media-text {
   min-height: 0;
   min-width: 0;
 }
@@ -105,7 +105,9 @@ withDefaults(defineProps<{
   font-weight: 600;
 }
 
-.photo-media {
+/* The media column wraps the frame + caption so they stack vertically,
+   with the frame taking the remaining height (after the caption). */
+.media-column {
   position: relative;
   min-height: 0;
   min-width: 0;
@@ -114,24 +116,48 @@ withDefaults(defineProps<{
   justify-content: center;
 }
 
-.photo-media img {
+/* The frame is the sized box the slot's content fills. `overflow: hidden`
+   + `border-radius` round whatever's inside (img, iframe, video, <Youtube>),
+   so callers don't need to style their embed for corners. */
+.media-frame {
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 6px;
+  background: color-mix(in oklab, var(--josh-fg) 4%, transparent);
+}
+
+/* Make common embed elements fill the frame by default. Slidev's <Youtube>
+   renders as <iframe>, so styling iframe covers it too. <img> defaults to
+   `contain` (no cropping) — override per-slide with scoped CSS for `cover`. */
+.media-frame :deep(img) {
   width: 100%;
   height: 100%;
-  object-fit: var(--fit, cover);
-  border-radius: 6px;
+  object-fit: contain;
+}
+.media-frame :deep(iframe),
+.media-frame :deep(video) {
+  width: 100%;
+  height: 100%;
+  border: 0;
 }
 
-.josh-photo.bleed .photo-media img {
+.josh-media.bleed .media-frame {
   border-radius: 0;
+  background: transparent;
 }
 
-.photo-caption {
-  position: absolute;
-  bottom: -1.6rem;
-  right: 0;
+.media-caption {
+  flex: 0 0 auto;
+  margin-top: 0.6rem;
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-size: 0.7rem;
   color: var(--josh-muted);
   letter-spacing: 0.02em;
+  text-align: right;
 }
 </style>
