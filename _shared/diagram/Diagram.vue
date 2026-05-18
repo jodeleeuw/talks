@@ -82,6 +82,10 @@ function snap(ref) {
   const b = lookup.value.get(id)
   if (!b) throw new Error(`Diagram: unknown id "${id}"`)
   const { x, y, w, h } = b
+  // Snap references resolve to the box's bounding-box edges regardless of
+  // `shape` (rect, ellipse, arrow, …). Connectors anchored to an arrow box
+  // land on the arrow's bbox edges, not on the polygon silhouette — same
+  // behavior as ellipse, where snap refs use the enclosing rect not the curve.
   switch (side) {
     case 'top':    return [x + w / 2, y]
     case 'bottom': return [x + w / 2, y + h]
@@ -228,14 +232,49 @@ function arrowMarkers(c) {
   }
 }
 
+// --- Reveal / hide directives ------------------------------------------------
+//
+// Two output channels:
+//   * `clickDirective(item)` — value for `v-click` (show-when-active semantics).
+//   * `hideDirective(item)`  — value for `v-click-hide` (hide-when-active),
+//                              used only when the item asks for hide-from-N
+//                              behavior (visible at start, hidden from N on).
+//
+// `isHideMode(item)` decides which channel renders the item. We render exactly
+// one `<g>` per item; the template's `v-if/v-else` picks the directive.
+//
+// Slidev caveats baked in here:
+//   * `v-click` normalizes any value `<= 0` (and `undefined`/`true`/`null`) to
+//     `1` with a warning, so we return `false` for always-visible items —
+//     resolveClick → calculate(false) → null → the directive becomes a no-op.
+//   * Inclusive `to:` is translated to half-open `to + 1` for `v-click` ranges.
+//   * `v-click-hide="N"` is hide-when-active, so `hideAt: N` (visible at start,
+//     hidden from click N on) maps cleanly to `v-click-hide="N"` — no
+//     normalization issue because Slidev only normalizes the value passed in,
+//     not the start of the range.
+
+function hideValue(item) {
+  // Extract the "hide at this click" value if the item is in hide-mode.
+  // Returns `null` if the item is a normal show-mode item.
+  if (item.hideAt != null) return item.hideAt
+  if (item.reveal && item.reveal.until != null && item.reveal.from == null) {
+    return item.reveal.until
+  }
+  return null
+}
+
+function isHideMode(item) {
+  return hideValue(item) != null
+}
+
 function clickDirective(item) {
-  // Slidev's v-click normalizes `undefined`/`true`/`null` to `'+1'`, which
-  // *consumes a sequential click* — so every always-visible box would steal a
-  // click and balloon the slide's click count. Return `false` so the directive
-  // becomes a no-op (resolveClick → calculate(false) → null → mounted returns).
   if (item.reveal && item.reveal.from != null) {
-    // Slidev uses a half-open `[start, end)` range, so we map our inclusive
-    // `to` to `to + 1`. `{from: 1, to: 1}` → `[1, 2]` → visible at click 1 only.
+    // `reveal: { from: A, until: B }` → half-open `[A, B)` (matches Slidev
+    // semantics directly: visible from A through B-1).
+    if (item.reveal.until != null) {
+      return [item.reveal.from, item.reveal.until]
+    }
+    // `reveal: { from: A, to: B }` is inclusive — translate to `[A, B + 1]`.
     return item.reveal.to != null
       ? [item.reveal.from, item.reveal.to + 1]
       : item.reveal.from
@@ -244,6 +283,13 @@ function clickDirective(item) {
     return item.revealAt
   return false
 }
+
+function hideDirective(item) {
+  // Only invoked from the template when `isHideMode(item)` is true.
+  return hideValue(item)
+}
+
+// --- Text rendering ----------------------------------------------------------
 
 // Multi-line text. Author can write either `lines: ["a", "b"]`, `text: ["a", "b"]`,
 // or `text: "a\nb"` — all become an array of strings. Single-string text returns
@@ -267,6 +313,128 @@ function firstDy(n) {
   return `${-((n - 1) / 2) * 1.2}em`
 }
 
+// Rotation transform for text. Author can pass a numeric angle in CSS degrees
+// (positive = clockwise) or the shorthands `"vertical-up"` / `"vertical-down"`.
+// Returns `null` when no rotation is requested so the attribute is omitted.
+function textRotation(item, cx, cy) {
+  const r = item.textRotate
+  if (r == null) return null
+  let deg
+  if (typeof r === 'number') deg = r
+  else if (r === 'vertical-up') deg = -90
+  else if (r === 'vertical-down') deg = 90
+  else throw new Error(`Diagram: unknown textRotate "${r}" (use number, "vertical-up", or "vertical-down")`)
+  if (!deg) return null
+  return `rotate(${deg} ${cx} ${cy})`
+}
+
+// --- Arrow shapes ------------------------------------------------------------
+//
+// `shape: "arrow" | "rightArrow" | "leftArrow" | "upArrow" | "downArrow"`
+// renders a PPTX-style chunky arrow (rectangular stem + triangular head).
+// Geometry: head occupies 35% of the long dimension, stem the other 65%.
+// Stem is 50% of the cross-dimension wide; head is the full cross-dimension.
+// The polygon is drawn inside the box's bbox; snap refs still resolve to the
+// bbox edges so connectors anchored to an arrow land where you'd expect.
+
+const ARROW_HEAD_FRAC = 0.35
+const ARROW_STEM_FRAC = 0.5    // stem width as a fraction of the cross-dimension
+
+function arrowDirection(shape) {
+  if (shape === 'arrow' || shape === 'rightArrow') return 'right'
+  if (shape === 'leftArrow') return 'left'
+  if (shape === 'upArrow') return 'up'
+  if (shape === 'downArrow') return 'down'
+  return null
+}
+
+function isArrowShape(item) {
+  return arrowDirection(item.shape) != null
+}
+
+function arrowPoints(item) {
+  const { x, y, w, h } = item
+  const dir = arrowDirection(item.shape)
+  const head = ARROW_HEAD_FRAC
+  const stemHalf = ARROW_STEM_FRAC / 2   // stem extends ±stemHalf from the long axis
+  let pts
+  if (dir === 'right') {
+    // Stem on left, head on right. Long axis = x.
+    const sx = x + (1 - head) * w
+    const t = y + (0.5 - stemHalf) * h
+    const b = y + (0.5 + stemHalf) * h
+    pts = [
+      [x, t], [sx, t], [sx, y], [x + w, y + h / 2], [sx, y + h], [sx, b], [x, b],
+    ]
+  } else if (dir === 'left') {
+    const sx = x + head * w
+    const t = y + (0.5 - stemHalf) * h
+    const b = y + (0.5 + stemHalf) * h
+    pts = [
+      [x + w, t], [sx, t], [sx, y], [x, y + h / 2], [sx, y + h], [sx, b], [x + w, b],
+    ]
+  } else if (dir === 'down') {
+    const sy = y + (1 - head) * h
+    const l = x + (0.5 - stemHalf) * w
+    const r = x + (0.5 + stemHalf) * w
+    pts = [
+      [l, y], [l, sy], [x, sy], [x + w / 2, y + h], [x + w, sy], [r, sy], [r, y],
+    ]
+  } else if (dir === 'up') {
+    const sy = y + head * h
+    const l = x + (0.5 - stemHalf) * w
+    const r = x + (0.5 + stemHalf) * w
+    pts = [
+      [l, y + h], [l, sy], [x, sy], [x + w / 2, y], [x + w, sy], [r, sy], [r, y + h],
+    ]
+  }
+  return pts.map(([px, py]) => `${px},${py}`).join(' ')
+}
+
+// Text inside an arrow centers within the stem area (not the head triangle),
+// so labels on vertical arrows don't drift into the arrowhead.
+function textCenter(item) {
+  const { x, y, w, h } = item
+  const dir = arrowDirection(item.shape)
+  if (!dir) return { cx: x + w / 2, cy: y + h / 2 }
+  const head = ARROW_HEAD_FRAC
+  if (dir === 'right') return { cx: x + (1 - head) / 2 * w, cy: y + h / 2 }
+  if (dir === 'left')  return { cx: x + head * w + (1 - head) / 2 * w, cy: y + h / 2 }
+  if (dir === 'down')  return { cx: x + w / 2, cy: y + (1 - head) / 2 * h }
+  if (dir === 'up')    return { cx: x + w / 2, cy: y + head * h + (1 - head) / 2 * h }
+  return { cx: x + w / 2, cy: y + h / 2 }
+}
+
+// --- Wrapped text (foreignObject) -------------------------------------------
+//
+// When `wrap: true` (or `maxWidth: <px>` is set), text is rendered via
+// `<foreignObject>` + a centered `<div>` so the browser handles word-wrap.
+// Backward compat: without `wrap`/`maxWidth`, fall through to the existing
+// `<text>` + `<tspan>` rendering so existing decks render byte-identically.
+
+const WRAP_PADDING = 8   // px breathing room inside the box
+
+function isWrapped(item) {
+  return item.wrap === true || item.maxWidth != null
+}
+
+function wrapBounds(item) {
+  const { x, y, w, h } = item
+  const padX = WRAP_PADDING
+  const padY = WRAP_PADDING / 2
+  const innerW = item.maxWidth != null
+    ? Math.min(item.maxWidth, w - padX * 2)
+    : w - padX * 2
+  const fx = x + (w - innerW) / 2
+  return { fx, fy: y + padY, fw: Math.max(0, innerW), fh: Math.max(0, h - padY * 2) }
+}
+
+function wrapText(item) {
+  // Same source-of-truth as textLines, but joined with explicit <br/>s so
+  // author-controlled line breaks survive wrapping.
+  return textLines(item)
+}
+
 const wrapStyle = computed(() => {
   if (props.fit === 'container') return null
   // 'aspect' (default): lock wrapper to spec's aspect ratio so width drives height.
@@ -281,23 +449,70 @@ const wrapStyle = computed(() => {
 <marker id="diagram-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="currentColor" /></marker>
 <marker id="diagram-arrow-start" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 10 0 L 0 5 L 10 10 Z" fill="currentColor" /></marker>
 </defs>
-<g v-for="g in groups" :key="`g-${g.id}`" v-click="clickDirective(g)" :class="['group', g.style ? `group-${g.style}` : null]">
+<template v-for="g in groups" :key="`g-${g.id}`">
+<g v-if="isHideMode(g)" v-click-hide="hideDirective(g)" :class="['group', g.style ? `group-${g.style}` : null]">
 <ellipse v-if="g.shape === 'ellipse'" :cx="g.x + g.w / 2" :cy="g.y + g.h / 2" :rx="g.w / 2" :ry="g.h / 2" />
+<polygon v-else-if="isArrowShape(g)" :points="arrowPoints(g)" />
 <rect v-else :x="g.x" :y="g.y" :width="g.w" :height="g.h" :rx="g.rx ?? 4" />
-<text v-if="textLines(g).length" :x="g.x + g.w / 2" :y="g.y + g.h / 2">
-<tspan v-for="(line, i) in textLines(g)" :key="i" :x="g.x + g.w / 2" :dy="i === 0 ? firstDy(textLines(g).length) : '1.2em'">{{ line }}</tspan>
+<template v-if="textLines(g).length">
+<foreignObject v-if="isWrapped(g)" :x="wrapBounds(g).fx" :y="wrapBounds(g).fy" :width="wrapBounds(g).fw" :height="wrapBounds(g).fh" :transform="textRotation(g, textCenter(g).cx, textCenter(g).cy)">
+<div xmlns="http://www.w3.org/1999/xhtml" class="diagram-wrap-text"><template v-for="(line, i) in wrapText(g)" :key="i"><br v-if="i > 0" />{{ line }}</template></div>
+</foreignObject>
+<text v-else :x="textCenter(g).cx" :y="textCenter(g).cy" :transform="textRotation(g, textCenter(g).cx, textCenter(g).cy)">
+<tspan v-for="(line, i) in textLines(g)" :key="i" :x="textCenter(g).cx" :dy="i === 0 ? firstDy(textLines(g).length) : '1.2em'">{{ line }}</tspan>
 </text>
+</template>
 </g>
-<g v-for="(c, i) in connectors" :key="`c-${i}`" v-click="clickDirective(c)" :class="['connector', c.style ? `connector-${c.style}` : null]">
+<g v-else v-click="clickDirective(g)" :class="['group', g.style ? `group-${g.style}` : null]">
+<ellipse v-if="g.shape === 'ellipse'" :cx="g.x + g.w / 2" :cy="g.y + g.h / 2" :rx="g.w / 2" :ry="g.h / 2" />
+<polygon v-else-if="isArrowShape(g)" :points="arrowPoints(g)" />
+<rect v-else :x="g.x" :y="g.y" :width="g.w" :height="g.h" :rx="g.rx ?? 4" />
+<template v-if="textLines(g).length">
+<foreignObject v-if="isWrapped(g)" :x="wrapBounds(g).fx" :y="wrapBounds(g).fy" :width="wrapBounds(g).fw" :height="wrapBounds(g).fh" :transform="textRotation(g, textCenter(g).cx, textCenter(g).cy)">
+<div xmlns="http://www.w3.org/1999/xhtml" class="diagram-wrap-text"><template v-for="(line, i) in wrapText(g)" :key="i"><br v-if="i > 0" />{{ line }}</template></div>
+</foreignObject>
+<text v-else :x="textCenter(g).cx" :y="textCenter(g).cy" :transform="textRotation(g, textCenter(g).cx, textCenter(g).cy)">
+<tspan v-for="(line, i) in textLines(g)" :key="i" :x="textCenter(g).cx" :dy="i === 0 ? firstDy(textLines(g).length) : '1.2em'">{{ line }}</tspan>
+</text>
+</template>
+</g>
+</template>
+<template v-for="(c, i) in connectors" :key="`c-${i}`">
+<g v-if="isHideMode(c)" v-click-hide="hideDirective(c)" :class="['connector', c.style ? `connector-${c.style}` : null]">
 <path :d="pathFor(c)" :marker-start="arrowMarkers(c).start" :marker-end="arrowMarkers(c).end" />
 </g>
-<g v-for="b in boxes" :key="`b-${b.id}`" v-click="clickDirective(b)" :class="['box', b.style ? `box-${b.style}` : null]">
-<ellipse v-if="b.shape === 'ellipse'" :cx="b.x + b.w / 2" :cy="b.y + b.h / 2" :rx="b.w / 2" :ry="b.h / 2" :style="b.fill ? { fill: b.fill } : null" />
-<rect v-else :x="b.x" :y="b.y" :width="b.w" :height="b.h" :rx="b.rx ?? 3" :style="b.fill ? { fill: b.fill } : null" />
-<text v-if="textLines(b).length" :x="b.x + b.w / 2" :y="b.y + b.h / 2">
-<tspan v-for="(line, i) in textLines(b)" :key="i" :x="b.x + b.w / 2" :dy="i === 0 ? firstDy(textLines(b).length) : '1.2em'">{{ line }}</tspan>
-</text>
+<g v-else v-click="clickDirective(c)" :class="['connector', c.style ? `connector-${c.style}` : null]">
+<path :d="pathFor(c)" :marker-start="arrowMarkers(c).start" :marker-end="arrowMarkers(c).end" />
 </g>
+</template>
+<template v-for="b in boxes" :key="`b-${b.id}`">
+<g v-if="isHideMode(b)" v-click-hide="hideDirective(b)" :class="['box', b.style ? `box-${b.style}` : null]">
+<ellipse v-if="b.shape === 'ellipse'" :cx="b.x + b.w / 2" :cy="b.y + b.h / 2" :rx="b.w / 2" :ry="b.h / 2" :style="b.fill ? { fill: b.fill } : null" />
+<polygon v-else-if="isArrowShape(b)" :points="arrowPoints(b)" :style="b.fill ? { fill: b.fill } : null" />
+<rect v-else :x="b.x" :y="b.y" :width="b.w" :height="b.h" :rx="b.rx ?? 3" :style="b.fill ? { fill: b.fill } : null" />
+<template v-if="textLines(b).length">
+<foreignObject v-if="isWrapped(b)" :x="wrapBounds(b).fx" :y="wrapBounds(b).fy" :width="wrapBounds(b).fw" :height="wrapBounds(b).fh" :transform="textRotation(b, textCenter(b).cx, textCenter(b).cy)">
+<div xmlns="http://www.w3.org/1999/xhtml" class="diagram-wrap-text"><template v-for="(line, i) in wrapText(b)" :key="i"><br v-if="i > 0" />{{ line }}</template></div>
+</foreignObject>
+<text v-else :x="textCenter(b).cx" :y="textCenter(b).cy" :transform="textRotation(b, textCenter(b).cx, textCenter(b).cy)">
+<tspan v-for="(line, i) in textLines(b)" :key="i" :x="textCenter(b).cx" :dy="i === 0 ? firstDy(textLines(b).length) : '1.2em'">{{ line }}</tspan>
+</text>
+</template>
+</g>
+<g v-else v-click="clickDirective(b)" :class="['box', b.style ? `box-${b.style}` : null]">
+<ellipse v-if="b.shape === 'ellipse'" :cx="b.x + b.w / 2" :cy="b.y + b.h / 2" :rx="b.w / 2" :ry="b.h / 2" :style="b.fill ? { fill: b.fill } : null" />
+<polygon v-else-if="isArrowShape(b)" :points="arrowPoints(b)" :style="b.fill ? { fill: b.fill } : null" />
+<rect v-else :x="b.x" :y="b.y" :width="b.w" :height="b.h" :rx="b.rx ?? 3" :style="b.fill ? { fill: b.fill } : null" />
+<template v-if="textLines(b).length">
+<foreignObject v-if="isWrapped(b)" :x="wrapBounds(b).fx" :y="wrapBounds(b).fy" :width="wrapBounds(b).fw" :height="wrapBounds(b).fh" :transform="textRotation(b, textCenter(b).cx, textCenter(b).cy)">
+<div xmlns="http://www.w3.org/1999/xhtml" class="diagram-wrap-text"><template v-for="(line, i) in wrapText(b)" :key="i"><br v-if="i > 0" />{{ line }}</template></div>
+</foreignObject>
+<text v-else :x="textCenter(b).cx" :y="textCenter(b).cy" :transform="textRotation(b, textCenter(b).cx, textCenter(b).cy)">
+<tspan v-for="(line, i) in textLines(b)" :key="i" :x="textCenter(b).cx" :dy="i === 0 ? firstDy(textLines(b).length) : '1.2em'">{{ line }}</tspan>
+</text>
+</template>
+</g>
+</template>
 </svg>
 </div>
 </template>
@@ -318,14 +533,17 @@ const wrapStyle = computed(() => {
 }
 .diagram .box rect,
 .diagram .box ellipse,
+.diagram .box polygon,
 .diagram .group rect,
-.diagram .group ellipse {
+.diagram .group ellipse,
+.diagram .group polygon {
   fill: var(--slidev-theme-bg, transparent);
   stroke: currentColor;
   stroke-width: 1.5;
 }
 .diagram .group rect,
-.diagram .group ellipse {
+.diagram .group ellipse,
+.diagram .group polygon {
   stroke-dasharray: 4 4;
   opacity: 0.6;
 }
@@ -338,5 +556,27 @@ const wrapStyle = computed(() => {
   fill: none;
   stroke: currentColor;
   stroke-width: 1.5;
+}
+/* Wrapped text via <foreignObject>: center the div inside the bbox, match
+   the inherited <text> styling so author can opt into wrap without restyling. */
+.diagram-wrap-text {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: currentColor;
+  font-family: inherit;
+  font-size: 18px;
+  line-height: 1.2;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  box-sizing: border-box;
+}
+.diagram .group .diagram-wrap-text {
+  font-size: 14px;
+  letter-spacing: 0.15em;
+  opacity: 0.6;
 }
 </style>

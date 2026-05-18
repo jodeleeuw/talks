@@ -45,9 +45,10 @@ The Diagram spec uses `revealAt: N` / `reveal: { from, to }` for click-driven bu
 
 Structure:
 - `package.json` — `slidev-theme` keywords, `colorSchema: 'dark'`, font + `themeConfig` defaults.
-- `layouts/` — `default` (vertically centered), `cover`, `section`, `center`, `cover-day` (course-lecture opener: course/event mark, big question in the H1 slot, discussion prompt in the `::discussion::` named slot), `media` (text + dominant media — `::media::` slot accepts `<img>`, `<Youtube>`, `<iframe>`, `<video>`, etc.; props: `side`, `bleed`, `caption`), `aside` (main + sidebar definition), `quote` (decorative bigmark + ::attribution::), `outro` (closer with optional ::next:: housekeeping).
+- `layouts/` — `default` (vertically centered), `cover`, `section`, `center`, `cover-day` (course-lecture opener: course/event mark, big question in the H1 slot, discussion prompt in the `::discussion::` named slot), `media` (text + dominant media — `::media::` slot accepts `<img>`, `<Youtube>`, `<iframe>`, `<video>`, etc.; props: `side`, `bleed`, `caption`), `aside` (main + sidebar definition), `quote` (decorative bigmark + ::attribution::), `outro` (closer with optional ::next:: housekeeping), `gallery` (2-6-image grid via named slots `::a::`–`::f::` plus optional `::overlay::` for a centered card; props: `cols`, `fit`, `gap`, `radius`, `bleed`), `image-bg` (full-bleed background image with overlaid text; props: `image`, `align`, `darken`, `position`, `tint`).
 - `styles/layout.css` + `code.css` — design tokens (`--josh-bg`, `--josh-fg`, `--josh-accent`, etc.), type scale, base layout. `.slidev-layout` sets `display: flex; flex-direction: column; justify-content: center; height: 100%` so content centers vertically by default.
 - `components/Hi.vue` — inline keyword highlight: `<Hi>word</Hi>` (or `variant="solid|box"`).
+- `components/DataTable.vue` — styled table for truth tables and small data grids: `<DataTable :headers="['A','B']" :rows="[[0,1],[1,0]]" :highlight-row="1" :highlight-col="0" />`. Monospace by default (`mono="false"` to switch off).
 - `global-top.vue` — the persistent footer (course/event left, page number + signature mark right).
 
 Talks configure the footer via headmatter:
@@ -60,7 +61,7 @@ themeConfig:
   date: Spring 2026
 ```
 
-Per-slide `footer: false` (or `footer: "custom text"`) overrides; cover/section/end layouts auto-hide it.
+Per-slide `footer: false` (or `footer: "custom text"`) overrides; `cover`, `section`, `end`, `cover-day`, `outro`, `image-bg`, and `gallery` layouts auto-hide it (see the `HIDE_ON` set in `global-top.vue`).
 
 Non-obvious gotchas:
 

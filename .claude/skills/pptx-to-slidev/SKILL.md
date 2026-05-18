@@ -62,11 +62,14 @@ If thumbnails aren't present (local PPTX with no Slides URL, or `--no-thumbnails
 | Pull-quote with attribution | `quote` |
 | Blank slide acting as a divider | `section` |
 | Single centered headline / call-to-action | `center` |
-| Image + text side-by-side | `two-cols-header` or `two-cols` |
-| Closing slide ("thanks", "questions") | `end` |
+| Image + text side-by-side | `media` (theme-josh) — `side: left|right`, optional `caption` |
+| 2–6 images in a grid / mosaic | `gallery` (theme-josh) — named slots `::a::`–`::f::`, optional `::overlay::` for a centered card |
+| Full-bleed background image with overlaid text | `image-bg` (theme-josh) — props `image`, `align`, `darken`, `position`, `tint` |
+| Truth table / small data grid | default layout + `<DataTable :headers :rows :highlight-row :highlight-col />` |
+| Closing slide ("thanks", "questions") | `end` or `outro` (theme-josh) |
 | Ordinary content slide | (no layout — use the default) |
 
-These are starting points, not rules. Pick whatever reads best.
+These are starting points, not rules. Pick whatever reads best. The `gallery`, `image-bg`, `media`, and `outro` layouts auto-hide the footer (see `global-top.vue`'s `HIDE_ON` set), so don't pile `footer: false` on top.
 
 ### Collapsing build-up slides
 
@@ -89,11 +92,12 @@ Watch especially for these transition shapes that are easy to miss:
 - **Structural duplication** — the same set of shapes appears a second time at the same coordinates (signalling unrolling or recurrence). The diff shows N shapes added; treat it as one click.
 - **Annotation swaps over a static diagram** — slide N and N+1 share the diagram but swap an explanatory text box. Use `reveal: { from: N, to: N }` on each annotation so only the active one shows.
 
-#### Three patterns to watch for in `_analysis.md`
+#### Four patterns to watch for in `_analysis.md`
 
 1. **Progressive bullets / shapes** — adjacent slides where each transition adds one or more elements. Each diff block = one click. Collapse with `<v-clicks>` (when the order matches DOM order) or `v-click="N"` (when it doesn't).
 2. **Diagram build-ups** — adjacent slides where new shapes appear over a constant base. Inside the `<Diagram>` spec, set `revealAt: N` on every element introduced by transition N — boxes, connectors, and groups all share the same N.
-3. **Highlight reveals** — adjacent slides with **identical plain text** but **different per-run formatting** (a sentence is black on one slide and gray on the next). The script flags these as `⚠ HIGHLIGHT-REVEAL` in the analysis and prints a per-run `[default] / [#XXXXXX] / [b]` breakdown under each formatted paragraph. **Do not collapse these by stripping formatting** — that loses the speaker's emphasis cue. Instead, split the text into segments and bind a class to `$clicks`:
+3. **Image-swap reveals** — adjacent slides with **identical text** but **different pictures** (a single heading like "Is this multiple realizability?" with the photo pair swapping each click). The script flags these as `🔄 IMAGE-SWAP-REVEAL`. Collapse with a stack of positioned `<div>`s, one per state, gated by `v-click.hide="N"` / `v-click="[N, N+1]"` / `v-click="N"`. See the converted deck `tmp_talks/05-do-all-minds-work-the-same-way/` for a worked example.
+4. **Highlight reveals** — adjacent slides with **identical plain text** but **different per-run formatting** (a sentence is black on one slide and gray on the next; or numbers gain a strikethrough). The script flags these as `⚠ HIGHLIGHT-REVEAL` in the analysis and prints a per-run `[default] / [#XXXXXX] / [b] / [s] / [u]` breakdown under each formatted paragraph (`[s]` = strikethrough, `[u]` = underline; combined like `[bs]`, `[s+#FF0000]`). **Do not collapse these by stripping formatting** — that loses the speaker's emphasis cue. Instead, split the text into segments and bind a class to `$clicks`:
 
    ```md
    ---
@@ -211,15 +215,20 @@ import spec from './diagrams/my-diagram.json'
     {
       "id": "input1",             // referenced by connectors as "input1.top|right|bottom|left|center"
       "x": 200, "y": 270, "w": 100, "h": 44,  // pixel coords in the viewBox space — copy straight from the analysis
+      "shape": "ellipse",         // optional — "ellipse" or one of the arrow shapes; default is a rectangle. See "Shapes" below
       "anchor": "top-left",       // optional, where (x, y) sits on the box — see below (default: top-left)
       "parent": "frame",          // optional, treat (x, y) as offsets from another box's top-left — see below
       "text": "Input",            // single line — or use `lines` / `"a\nb"` for multi-line, see "Text" below
       "lines": ["Input", "(US)"], // optional — array form for multi-line; takes precedence over `text`
+      "wrap": true,               // optional — auto-wrap text to the box width via <foreignObject>. See "Text" below
+      "maxWidth": 180,            // optional — px cap on wrap width (implies wrap)
+      "textRotate": "vertical-up", // optional — degrees number or "vertical-up"/"vertical-down". See "Rotated text"
       "style": "rnn",             // optional, becomes CSS class `box-rnn` on the <g> element
       "fill": "#999999",          // optional explicit fill (overrides theme CSS) — see Fills below
       "rx": 3,                    // optional corner radius (default 3 for boxes, 4 for groups)
       "revealAt": 2,              // optional, appear at click N and stay (shorthand for `reveal: { from: N }`)
-      "reveal": { "from": 1, "to": 2 }  // optional, visible from click 1 through click 2 — see Reveals below
+      "reveal": { "from": 1, "to": 2 },   // optional, visible from click 1 through click 2 — see Reveals below
+      "hideAt": 1                 // optional, visible at start, hidden from click N onward — see Reveals below
     }
   ],
   "connectors": [
@@ -239,6 +248,21 @@ import spec from './diagrams/my-diagram.json'
 ```
 
 **Box positions:** raw pixel coords in the `viewBox` coordinate system — the analysis already gives them in this form, so copy directly.
+
+**Shapes:** boxes default to a rectangle (`<rect>`). Set `shape:` to switch the geometry:
+
+| value | renders | notes |
+| --- | --- | --- |
+| omitted | rectangle | default — uses `rx` for corner radius (default 3) |
+| `"ellipse"` | ellipse / circle | radius is half the bbox in each axis |
+| `"arrow"` / `"rightArrow"` | chunky horizontal arrow → | stem 65% of width × 50% of height; head fills the remaining width and full height |
+| `"leftArrow"` | chunky horizontal arrow ← | mirror of rightArrow |
+| `"upArrow"` | chunky vertical arrow ↑ | stem at bottom, head at top |
+| `"downArrow"` | chunky vertical arrow ↓ | stem at top, head at bottom |
+
+PPTX exports the four arrow variants as native shapes (`<a:prstGeom prst="downArrow">` etc.); the analysis surfaces them on the shape line so you can copy `shape: "downArrow"` directly. Snap references (`box.top` / `bottom` / `left` / `right` / `center`) resolve to the bbox edges, not the arrow's silhouette — connectors anchored to an arrow box land at the bbox edge, just like any rect.
+
+Text inside an arrow centers within the stem portion (not the head triangle), so labels read cleanly along the shaft.
 
 **Anchor:** by default `(x, y)` is the box's **top-left corner** (matching the analysis output). Set `anchor` to reposition where `(x, y)` lands on the box — handy when you want to center a box on a known point or align it to a corner. Supported values: `top-left` (default), `top`, `top-right`, `left`, `center`, `right`, `bottom-left`, `bottom`, `bottom-right`. The 9-position grid corresponds to the same edge/corner names used by snap references on the other side. Example:
 
@@ -343,9 +367,28 @@ The analysis prints a ready-to-paste `d="…"` for every source connector. Snap 
 { "lines": ["Line 1", "Line 2"], "text": "" }  // explicit `lines` (takes precedence)
 ```
 
-All three render as multiple `<tspan>`s vertically centered around the box's center, with 1.2em line height. There's no automatic word-wrapping — pick line breaks deliberately. Don't paste the analysis's ` | `-joined string as-is into `text:`; that renders the `|` literally. Split into lines instead.
+All three render as multiple `<tspan>`s vertically centered around the box's center, with 1.2em line height. Pick line breaks deliberately. Don't paste the analysis's ` | `-joined string as-is into `text:` (that renders the `|` literally) — split into `lines`. The analysis prints multi-paragraph shape text either as a fenced block (multi-paragraph case) or ` | `-joined (legacy / diff-blocks); either way, one paragraph → one `lines[]` entry.
 
-The analysis prints multi-paragraph shape text joined with ` | ` for readability. When converting that to a spec, copy each paragraph as its own `lines[]` entry.
+**Auto-wrap.** For one-off long labels that should wrap to the box, set `wrap: true` (or `maxWidth: <px>`) instead of pre-splitting:
+
+```jsonc
+{ "id": "note", "x": 600, "y": 230, "w": 280, "h": 90,
+  "text": "What do these different circuits have in common?", "wrap": true }
+```
+
+Wrapped text renders via `<foreignObject>` + a centered `<div>` so the browser handles word-break and line-height. `maxWidth` (px) clamps the inner width below the box width — useful when you want narrower text inside a wider box. Without `wrap`/`maxWidth`, the component falls through to the existing `<text>`/`<tspan>` path — existing decks render byte-identically.
+
+#### Rotated text (`textRotate`)
+
+For labels that should run vertically (PPTX `<a:bodyPr vert="vert270">`, or any custom rotation), set `textRotate` on the box:
+
+```jsonc
+{ "text": "REDUCTIONISM", "textRotate": "vertical-up" }    // -90° / CCW (reads bottom-up)
+{ "text": "EMERGENCE",    "textRotate": "vertical-down" }  // 90° / CW  (reads top-down)
+{ "text": "10°",          "textRotate": 10 }               // arbitrary degrees, CSS convention (positive = CW)
+```
+
+The whole `<text>` (multi-line `<tspan>`s included) and any `<foreignObject>` wrap rotate together as a block, centered on the box's geometric center. The analysis emits `vert=270` / `vert=90` on shapes whose text is rotated — feed that straight into `textRotate`.
 
 #### Fit modes (`fit` prop)
 
@@ -398,10 +441,12 @@ The prep script reads PowerPoint's `<a:headEnd>` / `<a:tailEnd>` and computes `a
 
 #### Reveals
 
-Two forms, both work on boxes, groups, and connectors:
+Four forms, all work on boxes, groups, and connectors:
 
 - `revealAt: N` — appear at click `N` and stay forever. Shorthand for `reveal: { from: N }`.
 - `reveal: { from: A, to: B }` — visible from click `A` through click `B`, **inclusive on both ends**, then hidden. Useful when an explanatory label needs to swap each step of a build-up. The component handles the translation to Slidev's half-open internal range — you write inclusive coordinates and they work as written.
+- `hideAt: N` — **visible at start, hidden from click `N` onward**. The complement of `revealAt`. Routed through Slidev's `v-click-hide` directive internally, which sidesteps the `0 → 1` normalization trap, so `hideAt: 1` does what you'd expect (visible at click 0, hidden from click 1).
+- `reveal: { from: A, until: B }` — visible from `A` through `B-1` (half-open, parallel to Slidev's `v-click="[A, B]"`). Use `from`+`until` when the upper bound is "hide at click N onward"; use `from`+`to` when it's "still visible at click N."
 
 ```jsonc
 { "id": "explain-forget", "text": "The forget gate…", "reveal": { "from": 1, "to": 1 } },  // visible at click 1 only
@@ -460,8 +505,24 @@ Caveat: thumbnails are 1600×900 PNGs that bake in the source theme — fine for
 Things the component does not (yet) do — work around with the strategies above:
 
 - **No obstacle avoidance.** A connector from A.right to C.left will draw straight through anything in between (e.g. a box B sitting on that line). Either route around with `via`/`route`, or move B, or accept the crossing.
-- **No automatic text wrapping.** Long single-line text overflows its box. Either widen the box, use `lines:` to break it manually, or shorten the label.
-- **No animations between two states of the same element.** If a box needs to move or resize across clicks, declare two boxes with complementary `reveal` ranges (no built-in tween).
+- **No animations between two states of the same element.** If a box needs to move or resize across clicks, declare two boxes with complementary `reveal` / `hideAt` ranges (no built-in tween).
+
+### Analysis annotations reference
+
+Beyond the geometry/text dump and diff blocks, `_analysis.md` emits a few semantic hints. Recognize them on a quick scan:
+
+- `**Tables:**` (per slide) — PPTX tables (`<a:tbl>`) extracted with cell contents. Convert with the theme's `<DataTable :headers="..." :rows="...">` component (or a raw markdown table). The script prints rows as JSON arrays so they're paste-ready. Header detection prefers PPTX's `<a:tblPr firstRow="1">`, then `<a:tr h="1">`, then "all-bold first row"; when nothing matches it emits `Headers: null` and puts every row in `Rows`.
+- ` vert=270` / `vert=90` / `vert=stacked` on a shape line — the shape's text is rotated. Map directly to `textRotate: "vertical-up"` (270) / `"vertical-down"` (90) on a `<Diagram>` box, or wrap with `transform: rotate(...)` in raw HTML. Picked up from `<a:bodyPr vert="...">` *or* `<a:xfrm rot="...">` (PPTX uses both).
+- ` 🎨 full-slide overlay (likely a darken scrim over a background picture)` — a slide-sized opaque rect at (0,0), low luminance. **Don't render this as a content shape.** It's a darkening scrim over a background photo; treat the picture beneath as a background and put the overlay in CSS (a `linear-gradient` over the image, or `theme-josh`'s `image-bg` layout with `darken: 0.6`).
+- ` ✂ crop l=…% t=…% r=…% b=…%` on a picture — the source image is wider/taller than the bbox; only the visible portion shows. See "Cropped pictures" below for the wrapper recipe.
+- ` ⚠ video placeholder` on a picture — the source had an embedded video; Google's PPTX export replaced it with a thumbnail. The `<deck>.videos.json` sidecar has the original URL/embed metadata. See "Videos" below.
+- `🔄 IMAGE-SWAP-REVEAL` (slide annotation) — same heading as previous slide but pictures changed. Collapse into one Slidev slide with click-gated image stacks.
+- `⚠ HIGHLIGHT-REVEAL` (slide annotation) — same text as previous slide but per-run formatting (strike, color, bold) changed. Collapse with `$clicks`-bound CSS classes.
+- `💡 Mermaid candidate (LR|TB)` (slide annotation) — see "When to use Mermaid instead" below.
+
+**Multi-paragraph shape text.** When a shape has more than one paragraph, the per-slide listing emits a fenced block under the geometry line (not the inline `text='...'` form). Diff blocks still join with ` | ` because they need to be compact. Either way: one paragraph = one `<p>` (or one `lines[]` entry) when you author the slide.
+
+**Run-format tags.** Inside the per-paragraph breakdown, runs are tagged like `` [default] `` / `` [b+#FF0000] `` / `` [is] `` / `` [u] `` where letters mean: `b` bold, `i` italic, `s` strikethrough, `u` underline. They collapse into one token (`[bs]` = bold + strike) and a `+#RRGGBB` color suffix follows when present. Strike and underline pass through to your slide via GFM (`~~text~~` for strike) or inline CSS — no special component needed.
 
 ### When to use Mermaid instead
 
@@ -490,6 +551,40 @@ Same applies to any value that starts with one of YAML's flow indicators: `?`, `
 Images live alongside `slides.md` after the prep script runs. Reference them with a **relative** path: `<img src="./image1.png" />` or `![](./image1.png)`.
 
 Slidev's build will fail with `Import "/foo.png" from slide Markdown resolves outside of Vite server.fs.allow` if you use an absolute `/foo.png` path. **Do not** move images into `public/` — that's the path that triggers the error.
+
+#### Cropped pictures
+
+PPTX stores image crops as four edge insets (`<a:srcRect l="..." t="..." r="..." b="...">`, in 1/1000ths of a percent) — the source image is the full `image*.png` extracted from the deck, but only a subset is visible inside the picture's bbox. **The prep script extracts the full image; the crop is applied only at render time.** If you drop the raw `<img src="./image*.png" />` onto the slide, you'll show the whole thing instead of the framed portion the author chose.
+
+When a picture is cropped, the analysis flags it with `✂ crop l=…% t=…% r=…% b=…%` and prints four ready-to-paste CSS percentages — `width`, `height`, `left`, `top` — already computed against the wrapper. Plug them into a wrapper that's sized to the bbox and clips overflow:
+
+```md
+<div class="cropped">
+  <img src="./image3.png" alt="…" />
+</div>
+
+<style scoped>
+.cropped {
+  position: relative;
+  overflow: hidden;
+  /* size to the picture's bbox; aspect-ratio + flex works too */
+  width: 100%;
+  aspect-ratio: 406 / 300;   /* bbox w/h from the analysis */
+}
+.cropped img {
+  position: absolute;
+  /* paste the four values from the analysis directly */
+  width: 123.1%;
+  height: 100%;
+  left: -11.53%;
+  top: 0%;
+}
+</style>
+```
+
+The math: width = `100 / (100 - l - r)` × 100%, height = `100 / (100 - t - b)` × 100%, left = `-l / (100 - l - r)` × 100%, top = `-t / (100 - t - b)` × 100%. The script prints these directly so you don't have to compute them — just paste.
+
+For the common case of "use the cropped image inside the `media` layout's `::media::` slot", wrap the `<img>` in the cropping div and place that div in the slot. The layout's media container becomes the bbox; the wrapper clips to it.
 
 ### Videos
 

@@ -98,16 +98,17 @@ def _compose_transform(outer, inner):
 
 
 def _walk_shapes(root):
-    """Yield (element, transform) for each sp / cxnSp / pic, applying any
-    enclosing p:grpSp transforms so element bboxes can be mapped to slide-
-    absolute coords."""
+    """Yield (element, transform) for each sp / cxnSp / pic / graphicFrame,
+    applying any enclosing p:grpSp transforms so element bboxes can be mapped
+    to slide-absolute coords. `graphicFrame` covers tables (and charts, though
+    those aren't surfaced here)."""
     def walk(parent, transform):
         for child in parent:
             tag = child.tag.split('}', 1)[-1]
             if tag == 'grpSp':
                 new_t = _compose_transform(transform, _group_transform(child))
                 yield from walk(child, new_t)
-            elif tag in ('sp', 'cxnSp', 'pic'):
+            elif tag in ('sp', 'cxnSp', 'pic', 'graphicFrame'):
                 yield child, transform
             else:
                 yield from walk(child, transform)
@@ -129,9 +130,13 @@ def apply_transform(bbox, transform):
 
 
 def get_xfrm(elem):
+    # `<p:graphicFrame>` (tables, charts) stores its xfrm directly under the
+    # element — no `spPr` / `grpSpPr` wrapper.
     xfrm = elem.find("p:spPr/a:xfrm", NS)
     if xfrm is None:
         xfrm = elem.find("p:grpSpPr/a:xfrm", NS)
+    if xfrm is None:
+        xfrm = elem.find("p:xfrm", NS)
     if xfrm is None:
         return None
     off = xfrm.find("a:off", NS)
@@ -146,6 +151,56 @@ def get_xfrm(elem):
         "flipH": xfrm.attrib.get("flipH") == "1",
         "flipV": xfrm.attrib.get("flipV") == "1",
     }
+
+
+_VERT_MAP = {
+    # `vert` / `eaVert` rotate text 90° counter-clockwise (reads bottom-to-top
+    # on the right edge). `vert270` rotates clockwise (reads top-to-bottom on
+    # the left edge). `wordArtVert` stacks individual letters top-to-bottom
+    # without rotating them.
+    "vert": 270,
+    "eaVert": 270,
+    "vert270": 90,
+    "mongolianVert": 90,
+    "wordArtVert": "stacked",
+    "wordArtVertRtl": "stacked",
+}
+
+
+def _text_rotation(elem):
+    """Return a normalized vertical-text annotation for a shape, or None.
+
+    Considers two independent PPTX mechanisms:
+      - `<a:bodyPr vert="...">` — the text frame's own writing direction.
+      - `<p:spPr><a:xfrm rot="...">` — the whole shape (and its text) is rotated
+        in slide space. The PPTX `rot` attribute is in 60000ths of a degree.
+
+    Returns one of:
+      - an integer rotation in degrees (positive = clockwise), normalized into
+        `[1, 359]` so horizontal text is never reported.
+      - the string `"stacked"` for `wordArtVert*` body orientation.
+      - None when the text reads left-to-right horizontally.
+    """
+    if elem is None:
+        return None
+    body = elem.find("p:txBody/a:bodyPr", NS)
+    if body is not None:
+        vert = body.attrib.get("vert")
+        if vert and vert in _VERT_MAP:
+            return _VERT_MAP[vert]
+    xfrm = elem.find("p:spPr/a:xfrm", NS)
+    if xfrm is not None:
+        rot_raw = xfrm.attrib.get("rot")
+        if rot_raw:
+            try:
+                deg = int(rot_raw) / 60000.0
+            except (TypeError, ValueError):
+                deg = 0.0
+            # Normalize into [0, 360); skip near-horizontal.
+            deg = deg % 360
+            if 1 <= round(deg) <= 359:
+                return round(deg)
+    return None
 
 
 def _fill_color(spPr):
@@ -168,18 +223,137 @@ def _fill_color(spPr):
     return f"#{val}" if val else None
 
 
+def _relative_luminance(hex_color):
+    """sRGB relative luminance per WCAG: 0 = black, 1 = white. None if unparseable."""
+    if not hex_color:
+        return None
+    h = hex_color.lstrip("#")
+    if len(h) != 6:
+        return None
+    try:
+        r, g, b = (int(h[i:i + 2], 16) / 255.0 for i in (0, 2, 4))
+    except ValueError:
+        return None
+    def chan(c):
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+    return 0.2126 * chan(r) + 0.7152 * chan(g) + 0.0722 * chan(b)
+
+
+def _is_full_slide_overlay(bbox, fill, deck_size, edge_tol=2.0):
+    """True if a shape is a low-luminance rect covering the whole deck.
+
+    Used to spot "darken-the-photo" scrims authors stack between a background
+    picture and foreground text. `edge_tol` lets us tolerate the sub-pixel
+    drift that PPTX export produces (e.g. an off=`-150` EMU = `-0.02 px`).
+    """
+    if not bbox or not fill:
+        return False
+    deck_w, deck_h = deck_size
+    if (
+        bbox.get("x") is None or bbox.get("y") is None
+        or bbox.get("w") is None or bbox.get("h") is None
+    ):
+        return False
+    if abs(bbox["x"]) > edge_tol or abs(bbox["y"]) > edge_tol:
+        return False
+    if abs(bbox["w"] - deck_w) > edge_tol or abs(bbox["h"] - deck_h) > edge_tol:
+        return False
+    lum = _relative_luminance(fill)
+    if lum is None:
+        return False
+    return lum < 0.3
+
+
+def _parse_table(frame, tbl, transform):
+    """Extract a PPTX `<a:tbl>` into a structured record.
+
+    Returns `{bbox, cols, rows, headers, body}` where `headers` is either a
+    list of cell-text strings (one per column) or None when no header row was
+    detected, and `body` is a list of rows, each a list of cell-text strings.
+
+    Header detection: first row's `<a:tr h="1">` attribute is the authoritative
+    signal; failing that, we treat the row as headers when every non-empty cell
+    in it has bold-styled text. Authoring decks sometimes leave both signals
+    off, so the fallback to `headers: None` is intentional.
+    """
+    bbox = apply_transform(get_xfrm(frame), transform)
+    grid = tbl.find("a:tblGrid", NS)
+    cols = len(grid.findall("a:gridCol", NS)) if grid is not None else 0
+
+    tblPr = tbl.find("a:tblPr", NS)
+    first_row_flag = tblPr is not None and tblPr.attrib.get("firstRow") == "1"
+
+    rows_raw = []
+    for tr in tbl.findall("a:tr", NS):
+        row_h = tr.attrib.get("h", "")
+        cells = []
+        for tc in tr.findall("a:tc", NS):
+            paragraphs = extract_paragraphs(tc)
+            cell_text = "\n".join(p["text"] for p in paragraphs).strip()
+            all_bold = bool(paragraphs) and all(
+                all(r.get("bold") for r in p.get("runs", []) if r.get("text", "").strip())
+                for p in paragraphs
+                if any(r.get("text", "").strip() for r in p.get("runs", []))
+            )
+            cells.append({"text": cell_text, "bold": all_bold})
+        rows_raw.append({"h": row_h, "cells": cells})
+
+    headers = None
+    body_rows = [r["cells"] for r in rows_raw]
+    if rows_raw:
+        first = rows_raw[0]
+        first_texts = [c["text"] for c in first["cells"]]
+        # OOXML signals: `<a:tblPr firstRow="1">` is the canonical "this table
+        # has a header row" marker; a literal `<a:tr h="1">` row-attribute also
+        # appears in some authoring tools. Failing both, fall back to the
+        # heuristic "every non-empty cell in row 1 is bold".
+        h1 = first.get("h") == "1"
+        any_text = any(t.strip() for t in first_texts)
+        all_bold_with_text = any_text and all(
+            c["bold"] for c in first["cells"] if c["text"].strip()
+        )
+        if first_row_flag or h1 or all_bold_with_text:
+            headers = first_texts
+            body_rows = body_rows[1:]
+
+    rows = [[c["text"] for c in row] for row in body_rows]
+    if not cols and rows:
+        cols = max(len(r) for r in rows)
+    if not cols and headers:
+        cols = len(headers)
+
+    return {
+        "bbox": bbox,
+        "cols": cols,
+        "rows": len(rows),
+        "headers": headers,
+        "body": rows,
+    }
+
+
 def _run_format(r):
-    """Extract bold/italic/color from a run's rPr. None color = inherits default."""
+    """Extract bold/italic/strike/underline/color from a run's rPr.
+
+    None color = inherits default. `strike` is True for any non-`noStrike`
+    value (PPTX uses `sngStrike` / `dblStrike`). `underline` is True for any
+    non-`none` u= value (`sng`, `dbl`, `heavy`, …).
+    """
     rpr = r.find("a:rPr", NS)
-    bold = italic = False
+    bold = italic = strike = underline = False
     color = None
     if rpr is not None:
         bold = rpr.attrib.get("b") == "1"
         italic = rpr.attrib.get("i") == "1"
+        sv = rpr.attrib.get("strike")
+        if sv and sv != "noStrike":
+            strike = True
+        uv = rpr.attrib.get("u")
+        if uv and uv != "none":
+            underline = True
         clr = rpr.find(".//a:srgbClr", NS)
         if clr is not None:
             color = clr.attrib.get("val")
-    return bold, italic, color
+    return bold, italic, strike, underline, color
 
 
 def extract_paragraphs(elem):
@@ -196,16 +370,25 @@ def extract_paragraphs(elem):
         for child in list(p):
             tag = child.tag[len(a_ns):] if child.tag.startswith(a_ns) else child.tag
             if tag == "r":
-                bold, italic, color = _run_format(child)
+                bold, italic, strike, underline, color = _run_format(child)
                 t = child.find("a:t", NS)
                 text = (t.text or "") if t is not None else ""
-                runs.append({"text": text, "bold": bold, "italic": italic, "color": color})
+                runs.append({
+                    "text": text, "bold": bold, "italic": italic,
+                    "strike": strike, "underline": underline, "color": color,
+                })
             elif tag == "fld":
                 t = child.find("a:t", NS)
                 text = (t.text or "") if t is not None else ""
-                runs.append({"text": text, "bold": False, "italic": False, "color": None})
+                runs.append({
+                    "text": text, "bold": False, "italic": False,
+                    "strike": False, "underline": False, "color": None,
+                })
             elif tag == "br":
-                runs.append({"text": "\n", "bold": False, "italic": False, "color": None})
+                runs.append({
+                    "text": "\n", "bold": False, "italic": False,
+                    "strike": False, "underline": False, "color": None,
+                })
         full = "".join(r["text"] for r in runs)
         if not full.strip():
             continue
@@ -218,6 +401,52 @@ def extract_paragraphs(elem):
                 pass
         out.append({"text": full, "level": level, "runs": runs})
     return out
+
+
+def _parse_src_rect(pic):
+    """Read `<a:srcRect>` from a `<p:pic>` and return crop info, or None.
+
+    PPTX expresses crops as four edge insets (`l`/`t`/`r`/`b`) in 1/1000ths of
+    a percent of the source image's natural width/height. Missing attribute = 0.
+    The visible portion of the source is then stretched to fill the picture's
+    bbox — so to reproduce it in HTML we need to scale the `<img>` up and shift
+    it inside an `overflow:hidden` wrapper that matches the bbox.
+
+    Returns a dict with both the raw percentages and a set of precomputed CSS
+    values (as percentages of the wrapper) so callers can drop them straight
+    into a style block. Returns None when there's no crop (all edges = 0).
+    """
+    sr = pic.find("p:blipFill/a:srcRect", NS)
+    if sr is None:
+        return None
+
+    def pct(attr):
+        v = sr.attrib.get(attr, "0")
+        try:
+            return round(int(v) / 1000, 3)  # PPTX 1000ths-of-a-percent → percent
+        except (TypeError, ValueError):
+            return 0.0
+
+    l, t, r, b = pct("l"), pct("t"), pct("r"), pct("b")
+    if l == 0 and t == 0 and r == 0 and b == 0:
+        return None
+
+    # Visible portion of the source image, as a fraction of the source.
+    visible_w = 100 - l - r
+    visible_h = 100 - t - b
+    if visible_w <= 0 or visible_h <= 0:
+        return None  # malformed crop — fall back to uncropped
+
+    # CSS values: with the wrapper sized to the bbox and overflow:hidden,
+    # the <img> needs to be scaled up so the visible portion of the source
+    # fills the wrapper, then shifted left/up so the visible portion starts at (0,0).
+    return {
+        "l": l, "t": t, "r": r, "b": b,
+        "img_width_pct":  round(10000 / visible_w, 2),   # >= 100
+        "img_height_pct": round(10000 / visible_h, 2),
+        "img_left_pct":   round(-100 * l / visible_w, 2),  # <= 0
+        "img_top_pct":    round(-100 * t / visible_h, 2),
+    }
 
 
 def parse_rels(zf, rels_path):
@@ -489,12 +718,13 @@ def _arrow_direction(line_el):
     return "none"
 
 
-def parse_slide(zf, slide_path, rels_path):
+def parse_slide(zf, slide_path, rels_path, deck_size=DEFAULT_DECK):
     root = parse_xml(zf, slide_path)
     if root is None:
         return {"error": f"could not parse {slide_path}"}
 
     shapes = []
+    tables = []
     shape_by_id = {}
     deferred_connectors = []  # (elem, transform) — process after shapes are ready
     deferred_pictures = []
@@ -511,14 +741,21 @@ def parse_slide(zf, slide_path, rels_path):
                 prst_el = spPr.find("a:prstGeom", NS)
                 if prst_el is not None:
                     prst = prst_el.attrib.get("prst", "")
+            bbox = apply_transform(get_xfrm(elem), transform)
+            fill = _fill_color(spPr)
             shape = {
                 "id": sp_id,
                 "name": name,
                 "prst": prst,
-                "bbox": apply_transform(get_xfrm(elem), transform),
+                "bbox": bbox,
                 "text": extract_paragraphs(elem),
-                "fill": _fill_color(spPr),
+                "fill": fill,
             }
+            vert = _text_rotation(elem)
+            if vert is not None:
+                shape["vert"] = vert
+            if _is_full_slide_overlay(bbox, fill, deck_size):
+                shape["overlay"] = True
             shapes.append(shape)
             if sp_id:
                 shape_by_id[sp_id] = shape
@@ -526,6 +763,10 @@ def parse_slide(zf, slide_path, rels_path):
             deferred_connectors.append((elem, transform))
         elif tag == 'pic':
             deferred_pictures.append((elem, transform))
+        elif tag == 'graphicFrame':
+            tbl = elem.find("a:graphic/a:graphicData/a:tbl", NS)
+            if tbl is not None:
+                tables.append(_parse_table(elem, tbl, transform))
 
     connectors = []
     for cxn, transform in deferred_connectors:
@@ -584,16 +825,21 @@ def parse_slide(zf, slide_path, rels_path):
         name = cnv.attrib.get("name", "") if cnv is not None else ""
         blip = pic.find(".//a:blip", NS)
         rid = blip.attrib.get("{%s}embed" % NS["r"], "") if blip is not None else ""
-        pictures.append({
+        record = {
             "name": name,
             "bbox": apply_transform(get_xfrm(pic), transform),
             "file": image_refs.get(rid),
-        })
+        }
+        crop = _parse_src_rect(pic)
+        if crop is not None:
+            record["crop"] = crop
+        pictures.append(record)
 
     return {
         "shapes": shapes,
         "connectors": connectors,
         "pictures": pictures,
+        "tables": tables,
     }
 
 
@@ -692,19 +938,34 @@ def parse_notes(zf, notes_path):
 
 
 def _run_tag(r):
-    """Compact label describing a run's formatting deviations from the default."""
-    parts = []
+    """Compact label describing a run's formatting deviations from the default.
+
+    Order: bold, italic, strike, underline, color. Single-letter flags collapse
+    into one token (e.g. `bs` for bold+strike); color stays separate after a `+`.
+    """
+    flags = ""
     if r.get("bold"):
-        parts.append("b")
+        flags += "b"
     if r.get("italic"):
-        parts.append("i")
+        flags += "i"
+    if r.get("strike"):
+        flags += "s"
+    if r.get("underline"):
+        flags += "u"
+    parts = []
+    if flags:
+        parts.append(flags)
     if r.get("color"):
         parts.append("#" + r["color"])
     return "+".join(parts) if parts else "default"
 
 
 def _is_formatted(r):
-    return bool(r.get("bold") or r.get("italic") or r.get("color"))
+    return bool(
+        r.get("bold") or r.get("italic")
+        or r.get("strike") or r.get("underline")
+        or r.get("color")
+    )
 
 
 def _slide_plain_text(slide):
@@ -745,6 +1006,21 @@ def _mermaidable(slide):
         hsum += abs(en["x"] - st["x"])
         vsum += abs(en["y"] - st["y"])
     return "LR" if hsum >= vsum else "TB"
+
+
+def _slide_picture_signature(slide):
+    """Sorted tuple of image filenames on a slide — order-independent identity.
+
+    Used to tell apart "same text, different highlight" (HIGHLIGHT-REVEAL) from
+    "same text, different photos" (IMAGE-SWAP-REVEAL). Picture bbox/crop are
+    ignored on purpose — minor jitter shouldn't break the match.
+    """
+    files = []
+    for pic in slide.get("pictures") or []:
+        f = pic.get("file")
+        if f:
+            files.append(f)
+    return tuple(sorted(files))
 
 
 def _slide_format_signature(slide):
@@ -795,10 +1071,12 @@ def _connector_key(c):
 
 def _picture_key(pic):
     bb = pic.get("bbox") or {}
+    crop = pic.get("crop") or {}
     return (
         pic.get("file", ""),
         _round_pos(bb.get("x")), _round_pos(bb.get("y")),
         _round_pos(bb.get("w")), _round_pos(bb.get("h")),
+        crop.get("l", 0), crop.get("t", 0), crop.get("r", 0), crop.get("b", 0),
     )
 
 
@@ -846,7 +1124,11 @@ def _connector_one_line(c):
 
 def _picture_one_line(pic):
     bb = pic.get("bbox") or {}
-    return f"`{pic.get('file', '?')}` at ({bb.get('x')}, {bb.get('y')}) size {bb.get('w')}×{bb.get('h')}"
+    crop = pic.get("crop")
+    crop_tag = ""
+    if crop:
+        crop_tag = f" ✂ crop l={crop['l']}% t={crop['t']}% r={crop['r']}% b={crop['b']}%"
+    return f"`{pic.get('file', '?')}` at ({bb.get('x')}, {bb.get('y')}) size {bb.get('w')}×{bb.get('h')}{crop_tag}"
 
 
 def _emit_diff(L, prev_slide, curr_slide, *, limit=40):
@@ -949,6 +1231,7 @@ def write_summary(path, analysis):
 
     prev_plain = None
     prev_sig = None
+    prev_pics = None
     prev_index = None
     prev_slide = None
     if analysis.get("thumbnails_dir"):
@@ -970,10 +1253,15 @@ def write_summary(path, analysis):
 
         plain = _slide_plain_text(s)
         sig = _slide_format_signature(s)
-        if plain and plain == prev_plain and sig != prev_sig:
-            L.append("")
-            L.append(f"> ⚠ HIGHLIGHT-REVEAL: same plain text as slide {prev_index}, but per-run formatting differs. Collapse with slide {prev_index} into one Slidev slide where each segment toggles highlight on click.")
-        prev_plain, prev_sig, prev_index = plain, sig, s["index"]
+        pics = _slide_picture_signature(s)
+        if plain and plain == prev_plain:
+            if pics != prev_pics:
+                L.append("")
+                L.append(f"> 🔄 IMAGE-SWAP-REVEAL: same heading as slide {prev_index}, but the pictures differ. Likely a build-up where adjacent slides swap images while keeping the title — collapse into one Slidev slide with v-click image reveals.")
+            elif sig != prev_sig:
+                L.append("")
+                L.append(f"> ⚠ HIGHLIGHT-REVEAL: same plain text as slide {prev_index}, but per-run formatting differs. Collapse with slide {prev_index} into one Slidev slide where each segment toggles highlight on click.")
+        prev_plain, prev_sig, prev_pics, prev_index = plain, sig, pics, s["index"]
 
         mhint = _mermaidable(s)
         if mhint:
@@ -1018,6 +1306,39 @@ def write_summary(path, analysis):
                     f"- `{pic.get('file', '?')}` at ({bb.get('x')}, {bb.get('y')}) "
                     f"size {bb.get('w')}×{bb.get('h')}{placeholder_tag}"
                 )
+                crop = pic.get("crop")
+                if crop:
+                    L.append(
+                        f"  - ✂ **crop** l={crop['l']}% t={crop['t']}% r={crop['r']}% b={crop['b']}% "
+                        f"— source's full image is wider/taller than the bbox; only the visible portion shows. "
+                        f"Wrap in `overflow:hidden` and scale the `<img>` up — see SKILL.md \"Cropped pictures\"."
+                    )
+                    L.append(
+                        f"  - CSS values (percentages of the wrapper): "
+                        f"`img {{ width: {crop['img_width_pct']}%; height: {crop['img_height_pct']}%; "
+                        f"left: {crop['img_left_pct']}%; top: {crop['img_top_pct']}%; }}`"
+                    )
+
+        tbls = s.get("tables") or []
+        if tbls:
+            L.append("")
+            L.append("**Tables:**")
+            for t in tbls:
+                bb = t.get("bbox") or {}
+                L.append(
+                    f"- {t.get('cols', '?')}-col × {t.get('rows', '?')}-row table "
+                    f"at ({bb.get('x')}, {bb.get('y')}) size {bb.get('w')}×{bb.get('h')}"
+                )
+                headers = t.get("headers")
+                if headers is not None:
+                    L.append(f"  Headers: {headers}")
+                else:
+                    L.append("  Headers: null")
+                body = t.get("body") or []
+                if body:
+                    L.append("  Rows:")
+                    for row in body:
+                        L.append(f"  - {row}")
 
         vids = s.get("videos") or []
         if vids:
@@ -1052,13 +1373,33 @@ def write_summary(path, analysis):
             bb = sh.get("bbox") or {}
             if bb.get("x") is None:
                 continue
-            txt = " | ".join(p["text"] for p in sh.get("text", []))
+            paragraphs = [p["text"] for p in sh.get("text", [])]
             sid = sh.get("id")
             id_tag = f"#{sid} " if sid else ""
             fill_tag = f" fill={sh['fill']}" if sh.get("fill") else ""
-            shape_lines.append(
-                f"- {id_tag}`{sh.get('prst', '?')}` at ({bb.get('x')}, {bb.get('y')}) size {bb.get('w')}×{bb.get('h')}{fill_tag}  text={txt!r}"
+            vert = sh.get("vert")
+            vert_tag = f"  vert={vert}" if vert is not None else ""
+            overlay_tag = (
+                "  🎨 full-slide overlay (likely a darken scrim over a background picture)"
+                if sh.get("overlay") else ""
             )
+            head = (
+                f"- {id_tag}`{sh.get('prst', '?')}` at ({bb.get('x')}, {bb.get('y')}) "
+                f"size {bb.get('w')}×{bb.get('h')}{fill_tag}{vert_tag}{overlay_tag}"
+            )
+            # Single-paragraph (or empty) shapes keep the inline `text=` form
+            # so the analysis stays scannable. Multi-paragraph shapes need each
+            # paragraph on its own line — a fenced block is the only way to
+            # preserve line breaks inside a markdown list item.
+            if len(paragraphs) <= 1:
+                txt = paragraphs[0] if paragraphs else ""
+                shape_lines.append(f"{head}  text={txt!r}")
+            else:
+                shape_lines.append(head)
+                shape_lines.append("  ```")
+                for p in paragraphs:
+                    shape_lines.append(f"  {p}")
+                shape_lines.append("  ```")
         if shape_lines:
             L.append("")
             L.append("**Shapes (px in deck coords):**")
@@ -1108,7 +1449,7 @@ def write_summary(path, analysis):
             for line in notes.split("\n"):
                 L.append(f"> {line}")
 
-        if not (text_paras or pics or shape_lines or cxns or notes or vids):
+        if not (text_paras or pics or shape_lines or cxns or notes or vids or tbls):
             L.append("")
             L.append("_(blank — likely a section divider)_")
 
@@ -1231,7 +1572,7 @@ def main():
         for sname in slide_names:
             idx = int(re.search(r"slide(\d+)\.xml$", sname).group(1))
             rels_path = sname.replace("ppt/slides/", "ppt/slides/_rels/") + ".rels"
-            data = parse_slide(zf, sname, rels_path)
+            data = parse_slide(zf, sname, rels_path, deck_size=(deck_w, deck_h))
             data["notes"] = parse_notes(zf, f"ppt/notesSlides/notesSlide{idx}.xml")
             data["index"] = idx
             data["videos"] = videos_by_slide.get(idx, [])
