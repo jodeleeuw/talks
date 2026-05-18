@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { configs } from '@slidev/client'
+import FitContent from '../components/FitContent.vue'
 
 const tc = (configs.themeConfig ?? {}) as Record<string, string>
 </script>
@@ -12,7 +13,11 @@ const tc = (configs.themeConfig ?? {}) as Record<string, string>
     </div>
 
     <div class="cover-body">
-      <slot />
+      <FitContent align="center" origin="center">
+        <div class="cover-inner">
+          <slot />
+        </div>
+      </FitContent>
     </div>
 
     <div class="cover-meta">
@@ -49,12 +54,11 @@ const tc = (configs.themeConfig ?? {}) as Record<string, string>
 }
 
 .cover-body {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
+  min-height: 0;
+  overflow: hidden;
 }
 
-:slotted(h1) {
+.cover-body :deep(h1) {
   font-size: 4.5rem !important;
   font-weight: 600;
   line-height: 1.05;
@@ -63,8 +67,8 @@ const tc = (configs.themeConfig ?? {}) as Record<string, string>
   max-width: 18ch;
 }
 
-:slotted(h2),
-:slotted(p) {
+.cover-body :deep(h2),
+.cover-body :deep(p) {
   font-size: 1.6rem !important;
   color: var(--josh-fg-soft);
   font-weight: 400;

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import FitContent from '../components/FitContent.vue'
+
 defineProps<{ number?: string | number }>()
 </script>
 
@@ -8,7 +10,11 @@ defineProps<{ number?: string | number }>()
       §{{ number }}
     </div>
     <div class="section-body">
-      <slot />
+      <FitContent align="center" origin="center">
+        <div class="section-inner">
+          <slot />
+        </div>
+      </FitContent>
     </div>
   </div>
 </template>
@@ -17,11 +23,12 @@ defineProps<{ number?: string | number }>()
 .josh-section {
   display: flex;
   flex-direction: column;
-  justify-content: center;
   padding: 4rem 5rem;
+  height: 100%;
 }
 
 .section-number {
+  flex: 0 0 auto;
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-size: 1rem;
   color: var(--josh-accent);
@@ -29,7 +36,13 @@ defineProps<{ number?: string | number }>()
   margin-bottom: 1.2rem;
 }
 
-.section-body :slotted(h1) {
+.section-body {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.section-body :deep(h1) {
   font-size: 4rem !important;
   font-weight: 500;
   line-height: 1.05;
@@ -38,7 +51,7 @@ defineProps<{ number?: string | number }>()
   margin: 0;
 }
 
-.section-body :slotted(p) {
+.section-body :deep(p) {
   font-size: 1.4rem;
   color: var(--josh-fg-soft);
   max-width: 32ch;

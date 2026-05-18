@@ -18,7 +18,7 @@ layout: cover
 A subtitle or single-sentence framing
 
 ---
-layout: day
+layout: cover-day
 day: '02'
 ---
 

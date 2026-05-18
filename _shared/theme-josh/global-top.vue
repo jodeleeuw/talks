@@ -5,7 +5,7 @@ import { configs, useNav } from '@slidev/client'
 const tc = (configs.themeConfig ?? {}) as Record<string, string>
 const nav = useNav()
 
-const HIDE_ON = new Set(['cover', 'section', 'end', 'day'])
+const HIDE_ON = new Set(['cover', 'section', 'end', 'cover-day', 'outro'])
 
 const slideFrontmatter = computed<Record<string, any>>(
   () => (nav.currentSlideRoute.value?.meta as any)?.slide?.frontmatter ?? {},

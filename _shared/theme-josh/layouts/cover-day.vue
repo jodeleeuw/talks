@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useSlots } from 'vue'
 import { configs } from '@slidev/client'
+import FitContent from '../components/FitContent.vue'
 
 defineProps<{ day?: string }>()
 
@@ -19,7 +20,9 @@ const slots = useSlots()
     </header>
 
     <div class="title">
-      <slot />
+      <FitContent align="center" origin="left center">
+        <slot />
+      </FitContent>
     </div>
 
     <div v-if="slots.discussion" class="discussion">
@@ -27,7 +30,9 @@ const slots = useSlots()
         <span class="arrow">↓</span> Start here
       </div>
       <div class="discussion-body">
-        <slot name="discussion" />
+        <FitContent align="top">
+          <slot name="discussion" />
+        </FitContent>
       </div>
     </div>
   </div>
@@ -35,10 +40,10 @@ const slots = useSlots()
 
 <style scoped>
 .josh-day {
-  display: grid;
-  grid-template-rows: auto 1fr auto;
+  display: flex;
+  flex-direction: column;
   padding: 2.5rem 4rem 3rem;
-  gap: 2rem;
+  gap: 1.5rem;
   position: relative;
   overflow: hidden;
 }
@@ -68,6 +73,7 @@ const slots = useSlots()
 }
 
 .topbar {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 0.7rem;
@@ -81,11 +87,13 @@ const slots = useSlots()
 .day-tag { color: var(--josh-fg-soft); }
 
 .title {
+  flex: 1 1 0;
+  min-height: 0;
   display: flex;
   align-items: center;
 }
 
-.title :slotted(h1) {
+.title :deep(h1) {
   font-family: 'Fraunces', 'Source Serif Pro', Georgia, serif !important;
   font-size: 6.25rem !important;
   font-style: italic;
@@ -98,18 +106,24 @@ const slots = useSlots()
   max-width: 15ch;
 }
 
-.title :slotted(h1 em),
-.title :slotted(h1 strong) {
+.title :deep(h1 em),
+.title :deep(h1 strong) {
   font-style: italic;
   color: var(--josh-accent);
   font-weight: 500;
 }
 
 .discussion {
+  flex: 0 1 auto;
+  max-height: 50%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   max-width: 60ch;
 }
 
 .cue {
+  flex: 0 0 auto;
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-size: 0.85rem;
   color: var(--josh-accent);
@@ -129,14 +143,20 @@ const slots = useSlots()
   50% { transform: translateY(4px); }
 }
 
-.discussion-body :slotted(p) {
+.discussion-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.discussion-body :deep(p) {
   font-size: 1.55rem !important;
   color: var(--josh-fg) !important;
   line-height: 1.45;
   margin: 0 0 0.5rem;
 }
 
-.discussion-body :slotted(p:last-child) {
+.discussion-body :deep(p:last-child) {
   margin-bottom: 0;
 }
 </style>

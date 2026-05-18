@@ -45,7 +45,7 @@ The Diagram spec uses `revealAt: N` / `reveal: { from, to }` for click-driven bu
 
 Structure:
 - `package.json` — `slidev-theme` keywords, `colorSchema: 'dark'`, font + `themeConfig` defaults.
-- `layouts/` — `default` (vertically centered), `cover`, `section`, `center`, `day` (course-lecture opener: course/event mark, big question in the H1 slot, discussion prompt in the `::discussion::` named slot).
+- `layouts/` — `default` (vertically centered), `cover`, `section`, `center`, `cover-day` (course-lecture opener: course/event mark, big question in the H1 slot, discussion prompt in the `::discussion::` named slot), `photo` (text + dominant photo), `aside` (main + sidebar definition), `quote` (decorative bigmark + ::attribution::), `outro` (closer with optional ::next:: housekeeping).
 - `styles/layout.css` + `code.css` — design tokens (`--josh-bg`, `--josh-fg`, `--josh-accent`, etc.), type scale, base layout. `.slidev-layout` sets `display: flex; flex-direction: column; justify-content: center; height: 100%` so content centers vertically by default.
 - `components/Hi.vue` — inline keyword highlight: `<Hi>word</Hi>` (or `variant="solid|box"`).
 - `global-top.vue` — the persistent footer (course/event left, page number + signature mark right).
