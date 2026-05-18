@@ -4,4 +4,6 @@ dist/
 __pycache__/
 tmp_talks/
 *.pptx
+*.videos.json
+*.thumbnails/
 .venv/
