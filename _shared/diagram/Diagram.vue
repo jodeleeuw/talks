@@ -304,6 +304,81 @@ function textLines(item) {
   return []
 }
 
+// Coerce a `textByClick` value (string | string[]) into an array of lines.
+// Anything else (null/undefined/non-string/non-array) becomes an empty array,
+// which renders nothing for that state.
+function linesFromValue(v) {
+  if (Array.isArray(v)) return v.filter(s => s != null).map(String)
+  if (v == null) return []
+  if (typeof v === 'string') return v ? v.split('\n') : []
+  return [String(v)]
+}
+
+// --- Per-click text swaps (`textByClick`) ------------------------------------
+//
+// `textByClick: { "<N>": <string | string[]>, ... }` swaps the text content of
+// a stable box/group as clicks advance. The mapping is last-key-wins: the
+// largest key `<= current click` decides what to render. Keys are numbers.
+//
+//   - Key "0" (if present) replaces the box's static `text`/`lines` as the
+//     initial state.
+//   - If `text`/`lines` is set and no explicit "0" key exists, the static
+//     content fills the click-0 default until the smallest `textByClick` key
+//     fires.
+//   - If neither is set for click 0, the box renders no text until the first
+//     key fires.
+//
+// Geometry never changes — only the rendered text content. Each state is a
+// separate `<g>` with its own `v-click` / `v-click-hide` directive, so total
+// click counts are derived automatically (every state's bound participates
+// in Slidev's `maxMap`).
+function textByClickStates(item) {
+  const tbc = item.textByClick
+  if (!tbc || typeof tbc !== 'object') return []
+  const keys = Object.keys(tbc)
+    .map(k => Number(k))
+    .filter(n => Number.isFinite(n) && n >= 0)
+    .sort((a, b) => a - b)
+  if (keys.length === 0) return []
+
+  const states = []
+
+  // Static `text`/`lines` fills the click-0 slot when no explicit "0" key.
+  if (keys[0] !== 0) {
+    const defaultLines = textLines(item)
+    if (defaultLines.length) {
+      // Visible from start through (keys[0] - 1) inclusive. Use v-click-hide
+      // because v-click clamps `0` to `1` (which would skip click 0).
+      states.push({ mode: 'hide-at', value: keys[0], lines: defaultLines })
+    }
+  }
+
+  for (let i = 0; i < keys.length; i++) {
+    const k = keys[i]
+    const lines = linesFromValue(tbc[String(k)])
+    if (!lines.length) continue
+    const isLast = i === keys.length - 1
+    if (isLast) {
+      if (k === 0) {
+        // Only state and it starts at 0 → always visible, no directive.
+        states.push({ mode: 'none', lines })
+      } else {
+        states.push({ mode: 'show-at', value: k, lines })
+      }
+    } else {
+      const next = keys[i + 1]
+      if (k === 0) {
+        // From start through (next - 1). Same v-click(0) clamp issue → hide-at.
+        states.push({ mode: 'hide-at', value: next, lines })
+      } else {
+        // Half-open [k, next): matches Slidev's range semantics directly.
+        states.push({ mode: 'range', value: [k, next], lines })
+      }
+    }
+  }
+  return states
+}
+
 // First-tspan dy that centers a block of N lines on the wrapper's y coordinate.
 // dominant-baseline: middle puts each tspan's middle at its (x, y+dy). For an
 // odd count (1, 3, …) the middle line sits on y; for an even count (2, 4, …)
@@ -435,6 +510,51 @@ function wrapText(item) {
   return textLines(item)
 }
 
+// --- Connector labels --------------------------------------------------------
+//
+// `label: "<string>"` on a connector renders a plain `<text>` along the path.
+// Position is controlled by `labelAt`:
+//   - `'start'`  → at the path's start tip (the `from` end).
+//   - `'end'`    → at the path's end tip (the `to` end). Default.
+//   - <number>   → fraction t in [0, 1] along the straight line between the
+//                  two terminal coords. Suitable for straight/orthogonal paths.
+//
+// `labelOffset: { dx?, dy? }` shifts the anchor from the computed point.
+// Defaults: `'end'` → `{ dx: 8, dy: 0 }`, `'start'` → `{ dx: -8, dy: 0 }`,
+// numeric → `{ dx: 0, dy: -10 }`. Text alignment follows `labelAt`:
+// `'end'` → left-aligned, `'start'` → right-aligned, numeric → centered.
+//
+// Reveal/hide on the connector still apply to the label (it lives inside the
+// connector's `<g>`, so it inherits the directive).
+function labelInfo(c) {
+  if (c.label == null || c.label === '') return null
+  // Labels rely on resolvable `from`/`to` endpoints. Connectors using a raw
+  // `d:` path string don't expose terminal coords, so labels are unsupported
+  // there — the author can fall back to a no-border text box if needed.
+  if (c.from == null || c.to == null) return null
+  const at = c.labelAt ?? 'end'
+  const start = resolvePoint(c.from)
+  const end = resolvePoint(c.to)
+  let x, y, anchor
+  if (at === 'start') {
+    x = start[0]; y = start[1]; anchor = 'end'
+  } else if (at === 'end') {
+    x = end[0]; y = end[1]; anchor = 'start'
+  } else if (typeof at === 'number') {
+    const t = Math.max(0, Math.min(1, at))
+    x = (1 - t) * start[0] + t * end[0]
+    y = (1 - t) * start[1] + t * end[1]
+    anchor = 'middle'
+  } else {
+    throw new Error(`Diagram: unknown labelAt "${at}" (use "start", "end", or number in [0, 1])`)
+  }
+  const defaultDx = at === 'start' ? -8 : at === 'end' ? 8 : 0
+  const defaultDy = typeof at === 'number' ? -10 : 0
+  const dx = c.labelOffset?.dx ?? defaultDx
+  const dy = c.labelOffset?.dy ?? defaultDy
+  return { x: x + dx, y: y + dy, anchor, text: c.label }
+}
+
 const wrapStyle = computed(() => {
   if (props.fit === 'container') return null
   // 'aspect' (default): lock wrapper to spec's aspect ratio so width drives height.
@@ -454,7 +574,35 @@ const wrapStyle = computed(() => {
 <ellipse v-if="g.shape === 'ellipse'" :cx="g.x + g.w / 2" :cy="g.y + g.h / 2" :rx="g.w / 2" :ry="g.h / 2" />
 <polygon v-else-if="isArrowShape(g)" :points="arrowPoints(g)" />
 <rect v-else :x="g.x" :y="g.y" :width="g.w" :height="g.h" :rx="g.rx ?? 4" />
-<template v-if="textLines(g).length">
+<template v-if="textByClickStates(g).length">
+<template v-for="(state, si) in textByClickStates(g)" :key="`s-${si}`">
+<g v-if="state.mode === 'hide-at'" v-click-hide="state.value">
+<foreignObject v-if="isWrapped(g)" :x="wrapBounds(g).fx" :y="wrapBounds(g).fy" :width="wrapBounds(g).fw" :height="wrapBounds(g).fh" :transform="textRotation(g, textCenter(g).cx, textCenter(g).cy)">
+<div xmlns="http://www.w3.org/1999/xhtml" class="diagram-wrap-text"><template v-for="(line, li) in state.lines" :key="li"><br v-if="li > 0" />{{ line }}</template></div>
+</foreignObject>
+<text v-else :x="textCenter(g).cx" :y="textCenter(g).cy" :transform="textRotation(g, textCenter(g).cx, textCenter(g).cy)">
+<tspan v-for="(line, li) in state.lines" :key="li" :x="textCenter(g).cx" :dy="li === 0 ? firstDy(state.lines.length) : '1.2em'">{{ line }}</tspan>
+</text>
+</g>
+<g v-else-if="state.mode === 'none'">
+<foreignObject v-if="isWrapped(g)" :x="wrapBounds(g).fx" :y="wrapBounds(g).fy" :width="wrapBounds(g).fw" :height="wrapBounds(g).fh" :transform="textRotation(g, textCenter(g).cx, textCenter(g).cy)">
+<div xmlns="http://www.w3.org/1999/xhtml" class="diagram-wrap-text"><template v-for="(line, li) in state.lines" :key="li"><br v-if="li > 0" />{{ line }}</template></div>
+</foreignObject>
+<text v-else :x="textCenter(g).cx" :y="textCenter(g).cy" :transform="textRotation(g, textCenter(g).cx, textCenter(g).cy)">
+<tspan v-for="(line, li) in state.lines" :key="li" :x="textCenter(g).cx" :dy="li === 0 ? firstDy(state.lines.length) : '1.2em'">{{ line }}</tspan>
+</text>
+</g>
+<g v-else v-click="state.value">
+<foreignObject v-if="isWrapped(g)" :x="wrapBounds(g).fx" :y="wrapBounds(g).fy" :width="wrapBounds(g).fw" :height="wrapBounds(g).fh" :transform="textRotation(g, textCenter(g).cx, textCenter(g).cy)">
+<div xmlns="http://www.w3.org/1999/xhtml" class="diagram-wrap-text"><template v-for="(line, li) in state.lines" :key="li"><br v-if="li > 0" />{{ line }}</template></div>
+</foreignObject>
+<text v-else :x="textCenter(g).cx" :y="textCenter(g).cy" :transform="textRotation(g, textCenter(g).cx, textCenter(g).cy)">
+<tspan v-for="(line, li) in state.lines" :key="li" :x="textCenter(g).cx" :dy="li === 0 ? firstDy(state.lines.length) : '1.2em'">{{ line }}</tspan>
+</text>
+</g>
+</template>
+</template>
+<template v-else-if="textLines(g).length">
 <foreignObject v-if="isWrapped(g)" :x="wrapBounds(g).fx" :y="wrapBounds(g).fy" :width="wrapBounds(g).fw" :height="wrapBounds(g).fh" :transform="textRotation(g, textCenter(g).cx, textCenter(g).cy)">
 <div xmlns="http://www.w3.org/1999/xhtml" class="diagram-wrap-text"><template v-for="(line, i) in wrapText(g)" :key="i"><br v-if="i > 0" />{{ line }}</template></div>
 </foreignObject>
@@ -467,7 +615,35 @@ const wrapStyle = computed(() => {
 <ellipse v-if="g.shape === 'ellipse'" :cx="g.x + g.w / 2" :cy="g.y + g.h / 2" :rx="g.w / 2" :ry="g.h / 2" />
 <polygon v-else-if="isArrowShape(g)" :points="arrowPoints(g)" />
 <rect v-else :x="g.x" :y="g.y" :width="g.w" :height="g.h" :rx="g.rx ?? 4" />
-<template v-if="textLines(g).length">
+<template v-if="textByClickStates(g).length">
+<template v-for="(state, si) in textByClickStates(g)" :key="`s-${si}`">
+<g v-if="state.mode === 'hide-at'" v-click-hide="state.value">
+<foreignObject v-if="isWrapped(g)" :x="wrapBounds(g).fx" :y="wrapBounds(g).fy" :width="wrapBounds(g).fw" :height="wrapBounds(g).fh" :transform="textRotation(g, textCenter(g).cx, textCenter(g).cy)">
+<div xmlns="http://www.w3.org/1999/xhtml" class="diagram-wrap-text"><template v-for="(line, li) in state.lines" :key="li"><br v-if="li > 0" />{{ line }}</template></div>
+</foreignObject>
+<text v-else :x="textCenter(g).cx" :y="textCenter(g).cy" :transform="textRotation(g, textCenter(g).cx, textCenter(g).cy)">
+<tspan v-for="(line, li) in state.lines" :key="li" :x="textCenter(g).cx" :dy="li === 0 ? firstDy(state.lines.length) : '1.2em'">{{ line }}</tspan>
+</text>
+</g>
+<g v-else-if="state.mode === 'none'">
+<foreignObject v-if="isWrapped(g)" :x="wrapBounds(g).fx" :y="wrapBounds(g).fy" :width="wrapBounds(g).fw" :height="wrapBounds(g).fh" :transform="textRotation(g, textCenter(g).cx, textCenter(g).cy)">
+<div xmlns="http://www.w3.org/1999/xhtml" class="diagram-wrap-text"><template v-for="(line, li) in state.lines" :key="li"><br v-if="li > 0" />{{ line }}</template></div>
+</foreignObject>
+<text v-else :x="textCenter(g).cx" :y="textCenter(g).cy" :transform="textRotation(g, textCenter(g).cx, textCenter(g).cy)">
+<tspan v-for="(line, li) in state.lines" :key="li" :x="textCenter(g).cx" :dy="li === 0 ? firstDy(state.lines.length) : '1.2em'">{{ line }}</tspan>
+</text>
+</g>
+<g v-else v-click="state.value">
+<foreignObject v-if="isWrapped(g)" :x="wrapBounds(g).fx" :y="wrapBounds(g).fy" :width="wrapBounds(g).fw" :height="wrapBounds(g).fh" :transform="textRotation(g, textCenter(g).cx, textCenter(g).cy)">
+<div xmlns="http://www.w3.org/1999/xhtml" class="diagram-wrap-text"><template v-for="(line, li) in state.lines" :key="li"><br v-if="li > 0" />{{ line }}</template></div>
+</foreignObject>
+<text v-else :x="textCenter(g).cx" :y="textCenter(g).cy" :transform="textRotation(g, textCenter(g).cx, textCenter(g).cy)">
+<tspan v-for="(line, li) in state.lines" :key="li" :x="textCenter(g).cx" :dy="li === 0 ? firstDy(state.lines.length) : '1.2em'">{{ line }}</tspan>
+</text>
+</g>
+</template>
+</template>
+<template v-else-if="textLines(g).length">
 <foreignObject v-if="isWrapped(g)" :x="wrapBounds(g).fx" :y="wrapBounds(g).fy" :width="wrapBounds(g).fw" :height="wrapBounds(g).fh" :transform="textRotation(g, textCenter(g).cx, textCenter(g).cy)">
 <div xmlns="http://www.w3.org/1999/xhtml" class="diagram-wrap-text"><template v-for="(line, i) in wrapText(g)" :key="i"><br v-if="i > 0" />{{ line }}</template></div>
 </foreignObject>
@@ -480,9 +656,11 @@ const wrapStyle = computed(() => {
 <template v-for="(c, i) in connectors" :key="`c-${i}`">
 <g v-if="isHideMode(c)" v-click-hide="hideDirective(c)" :class="['connector', c.style ? `connector-${c.style}` : null]">
 <path :d="pathFor(c)" :marker-start="arrowMarkers(c).start" :marker-end="arrowMarkers(c).end" />
+<text v-if="labelInfo(c)" class="connector-label" :x="labelInfo(c).x" :y="labelInfo(c).y" :style="{ textAnchor: labelInfo(c).anchor }">{{ labelInfo(c).text }}</text>
 </g>
 <g v-else v-click="clickDirective(c)" :class="['connector', c.style ? `connector-${c.style}` : null]">
 <path :d="pathFor(c)" :marker-start="arrowMarkers(c).start" :marker-end="arrowMarkers(c).end" />
+<text v-if="labelInfo(c)" class="connector-label" :x="labelInfo(c).x" :y="labelInfo(c).y" :style="{ textAnchor: labelInfo(c).anchor }">{{ labelInfo(c).text }}</text>
 </g>
 </template>
 <template v-for="b in boxes" :key="`b-${b.id}`">
@@ -490,7 +668,35 @@ const wrapStyle = computed(() => {
 <ellipse v-if="b.shape === 'ellipse'" :cx="b.x + b.w / 2" :cy="b.y + b.h / 2" :rx="b.w / 2" :ry="b.h / 2" :style="b.fill ? { fill: b.fill } : null" />
 <polygon v-else-if="isArrowShape(b)" :points="arrowPoints(b)" :style="b.fill ? { fill: b.fill } : null" />
 <rect v-else :x="b.x" :y="b.y" :width="b.w" :height="b.h" :rx="b.rx ?? 3" :style="b.fill ? { fill: b.fill } : null" />
-<template v-if="textLines(b).length">
+<template v-if="textByClickStates(b).length">
+<template v-for="(state, si) in textByClickStates(b)" :key="`s-${si}`">
+<g v-if="state.mode === 'hide-at'" v-click-hide="state.value">
+<foreignObject v-if="isWrapped(b)" :x="wrapBounds(b).fx" :y="wrapBounds(b).fy" :width="wrapBounds(b).fw" :height="wrapBounds(b).fh" :transform="textRotation(b, textCenter(b).cx, textCenter(b).cy)">
+<div xmlns="http://www.w3.org/1999/xhtml" class="diagram-wrap-text"><template v-for="(line, li) in state.lines" :key="li"><br v-if="li > 0" />{{ line }}</template></div>
+</foreignObject>
+<text v-else :x="textCenter(b).cx" :y="textCenter(b).cy" :transform="textRotation(b, textCenter(b).cx, textCenter(b).cy)">
+<tspan v-for="(line, li) in state.lines" :key="li" :x="textCenter(b).cx" :dy="li === 0 ? firstDy(state.lines.length) : '1.2em'">{{ line }}</tspan>
+</text>
+</g>
+<g v-else-if="state.mode === 'none'">
+<foreignObject v-if="isWrapped(b)" :x="wrapBounds(b).fx" :y="wrapBounds(b).fy" :width="wrapBounds(b).fw" :height="wrapBounds(b).fh" :transform="textRotation(b, textCenter(b).cx, textCenter(b).cy)">
+<div xmlns="http://www.w3.org/1999/xhtml" class="diagram-wrap-text"><template v-for="(line, li) in state.lines" :key="li"><br v-if="li > 0" />{{ line }}</template></div>
+</foreignObject>
+<text v-else :x="textCenter(b).cx" :y="textCenter(b).cy" :transform="textRotation(b, textCenter(b).cx, textCenter(b).cy)">
+<tspan v-for="(line, li) in state.lines" :key="li" :x="textCenter(b).cx" :dy="li === 0 ? firstDy(state.lines.length) : '1.2em'">{{ line }}</tspan>
+</text>
+</g>
+<g v-else v-click="state.value">
+<foreignObject v-if="isWrapped(b)" :x="wrapBounds(b).fx" :y="wrapBounds(b).fy" :width="wrapBounds(b).fw" :height="wrapBounds(b).fh" :transform="textRotation(b, textCenter(b).cx, textCenter(b).cy)">
+<div xmlns="http://www.w3.org/1999/xhtml" class="diagram-wrap-text"><template v-for="(line, li) in state.lines" :key="li"><br v-if="li > 0" />{{ line }}</template></div>
+</foreignObject>
+<text v-else :x="textCenter(b).cx" :y="textCenter(b).cy" :transform="textRotation(b, textCenter(b).cx, textCenter(b).cy)">
+<tspan v-for="(line, li) in state.lines" :key="li" :x="textCenter(b).cx" :dy="li === 0 ? firstDy(state.lines.length) : '1.2em'">{{ line }}</tspan>
+</text>
+</g>
+</template>
+</template>
+<template v-else-if="textLines(b).length">
 <foreignObject v-if="isWrapped(b)" :x="wrapBounds(b).fx" :y="wrapBounds(b).fy" :width="wrapBounds(b).fw" :height="wrapBounds(b).fh" :transform="textRotation(b, textCenter(b).cx, textCenter(b).cy)">
 <div xmlns="http://www.w3.org/1999/xhtml" class="diagram-wrap-text"><template v-for="(line, i) in wrapText(b)" :key="i"><br v-if="i > 0" />{{ line }}</template></div>
 </foreignObject>
@@ -503,7 +709,35 @@ const wrapStyle = computed(() => {
 <ellipse v-if="b.shape === 'ellipse'" :cx="b.x + b.w / 2" :cy="b.y + b.h / 2" :rx="b.w / 2" :ry="b.h / 2" :style="b.fill ? { fill: b.fill } : null" />
 <polygon v-else-if="isArrowShape(b)" :points="arrowPoints(b)" :style="b.fill ? { fill: b.fill } : null" />
 <rect v-else :x="b.x" :y="b.y" :width="b.w" :height="b.h" :rx="b.rx ?? 3" :style="b.fill ? { fill: b.fill } : null" />
-<template v-if="textLines(b).length">
+<template v-if="textByClickStates(b).length">
+<template v-for="(state, si) in textByClickStates(b)" :key="`s-${si}`">
+<g v-if="state.mode === 'hide-at'" v-click-hide="state.value">
+<foreignObject v-if="isWrapped(b)" :x="wrapBounds(b).fx" :y="wrapBounds(b).fy" :width="wrapBounds(b).fw" :height="wrapBounds(b).fh" :transform="textRotation(b, textCenter(b).cx, textCenter(b).cy)">
+<div xmlns="http://www.w3.org/1999/xhtml" class="diagram-wrap-text"><template v-for="(line, li) in state.lines" :key="li"><br v-if="li > 0" />{{ line }}</template></div>
+</foreignObject>
+<text v-else :x="textCenter(b).cx" :y="textCenter(b).cy" :transform="textRotation(b, textCenter(b).cx, textCenter(b).cy)">
+<tspan v-for="(line, li) in state.lines" :key="li" :x="textCenter(b).cx" :dy="li === 0 ? firstDy(state.lines.length) : '1.2em'">{{ line }}</tspan>
+</text>
+</g>
+<g v-else-if="state.mode === 'none'">
+<foreignObject v-if="isWrapped(b)" :x="wrapBounds(b).fx" :y="wrapBounds(b).fy" :width="wrapBounds(b).fw" :height="wrapBounds(b).fh" :transform="textRotation(b, textCenter(b).cx, textCenter(b).cy)">
+<div xmlns="http://www.w3.org/1999/xhtml" class="diagram-wrap-text"><template v-for="(line, li) in state.lines" :key="li"><br v-if="li > 0" />{{ line }}</template></div>
+</foreignObject>
+<text v-else :x="textCenter(b).cx" :y="textCenter(b).cy" :transform="textRotation(b, textCenter(b).cx, textCenter(b).cy)">
+<tspan v-for="(line, li) in state.lines" :key="li" :x="textCenter(b).cx" :dy="li === 0 ? firstDy(state.lines.length) : '1.2em'">{{ line }}</tspan>
+</text>
+</g>
+<g v-else v-click="state.value">
+<foreignObject v-if="isWrapped(b)" :x="wrapBounds(b).fx" :y="wrapBounds(b).fy" :width="wrapBounds(b).fw" :height="wrapBounds(b).fh" :transform="textRotation(b, textCenter(b).cx, textCenter(b).cy)">
+<div xmlns="http://www.w3.org/1999/xhtml" class="diagram-wrap-text"><template v-for="(line, li) in state.lines" :key="li"><br v-if="li > 0" />{{ line }}</template></div>
+</foreignObject>
+<text v-else :x="textCenter(b).cx" :y="textCenter(b).cy" :transform="textRotation(b, textCenter(b).cx, textCenter(b).cy)">
+<tspan v-for="(line, li) in state.lines" :key="li" :x="textCenter(b).cx" :dy="li === 0 ? firstDy(state.lines.length) : '1.2em'">{{ line }}</tspan>
+</text>
+</g>
+</template>
+</template>
+<template v-else-if="textLines(b).length">
 <foreignObject v-if="isWrapped(b)" :x="wrapBounds(b).fx" :y="wrapBounds(b).fy" :width="wrapBounds(b).fw" :height="wrapBounds(b).fh" :transform="textRotation(b, textCenter(b).cx, textCenter(b).cy)">
 <div xmlns="http://www.w3.org/1999/xhtml" class="diagram-wrap-text"><template v-for="(line, i) in wrapText(b)" :key="i"><br v-if="i > 0" />{{ line }}</template></div>
 </foreignObject>

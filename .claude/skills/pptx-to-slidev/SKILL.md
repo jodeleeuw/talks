@@ -230,7 +230,8 @@ import spec from './diagrams/my-diagram.json'
       "rx": 3,                    // optional corner radius (default 3 for boxes, 4 for groups)
       "revealAt": 2,              // optional, appear at click N and stay (shorthand for `reveal: { from: N }`)
       "reveal": { "from": 1, "to": 2 },   // optional, visible from click 1 through click 2 — see Reveals below
-      "hideAt": 1                 // optional, visible at start, hidden from click N onward — see Reveals below
+      "hideAt": 1,                // optional, visible at start, hidden from click N onward — see Reveals below
+      "textByClick": { "3": "f(X)", "4": ["1 if X ≥ T", "0 if X < T"] }   // optional — swap text content per click, see Per-click text swaps below
     }
   ],
   "connectors": [
@@ -244,6 +245,7 @@ import spec from './diagrams/my-diagram.json'
     { "from": "a.right", "to": "b.left", "style": "highlight", "arrow": false },
     { "from": "out.top", "to": "in.bottom", "arrow": "reverse" },               // arrow at the start instead — see Arrows below
     { "from": "a.right", "to": "b.left", "arrow": "both" },                     // arrows at both ends
+    { "from": "act.right", "to": "out.left", "label": "signal" },               // text along the path — see Connector labels below
     { "d": "M 776 168 Q 700 100 600 180", "style": "curve" }                    // raw SVG path — fallback for curves
   ]
 }
@@ -461,6 +463,49 @@ Don't pass `0` as `from`/`to`/`revealAt` — Slidev normalizes 0 to 1 with a con
 
 If a build-up needs the same element to *move* between clicks (e.g. an Output box at one y-coord for clicks 0–1, then a different y-coord from click 2 onward), declare two boxes with overlapping coords and complementary `reveal` ranges. There's no built-in tween.
 
+#### Per-click text swaps (`textByClick`)
+
+When the *same* box gains or swaps text as clicks advance, use `textByClick` instead of declaring ghost-overlay boxes at the same coords. The mapping is `{ "<click>": <string | string[]> }` and is **last-key-wins**: the largest key `≤ current click` decides what to render. Strings are single-line; arrays render as multi-line `lines`.
+
+```jsonc
+{
+  "id": "act", "x": 620, "y": 355, "w": 140, "h": 60, "style": "act",
+  "textByClick": {
+    "3": "f(X)",
+    "4": ["1 if X ≥ T", "0 if X < T"]
+  }
+}
+```
+
+- Click 0–2: no text (the box is empty).
+- Click 3: `"f(X)"`.
+- Click 4 onward: the two-line threshold rule.
+
+If you also set the static `text`/`lines` and omit a `"0"` key, the static content fills click 0 until the smallest `textByClick` key fires. An explicit `"0"` key replaces the static content as the initial state.
+
+Geometry never changes — only the rendered text. Total click count is derived automatically (every state's `v-click`/`v-click-hide` bound participates in Slidev's `maxMap`), so adding `textByClick: { "4": ... }` correctly extends the slide's click total.
+
+Prefer `textByClick` over the ghost-overlay-box pattern whenever the only thing changing is the text content of a stable shape — it's one box instead of three, and the JSON stays readable.
+
+#### Connector labels (`label`, `labelAt`, `labelOffset`)
+
+Render a text label along a connector path. The label inherits the connector's reveal/hide directive (so hiding the connector hides the label), and it sits at the post-`outset` tip — not the snap point.
+
+```jsonc
+{ "from": "act.right", "to": "out.left", "label": "signal" }                 // text right of the end tip (default)
+{ "from": "a.right", "to": "b.left", "label": "X = 5", "labelAt": 0.5 }      // midpoint, centered above the line
+{ "from": "in.bottom", "to": "out.top", "label": "h", "labelAt": "start" }   // at the start tip, left-aligned
+```
+
+- `labelAt: 'end'` (default) — label anchored at the `to` tip, left-aligned (text reads right of the tip). Default offset `{ dx: 8, dy: 0 }`.
+- `labelAt: 'start'` — anchored at the `from` tip, right-aligned. Default offset `{ dx: -8, dy: 0 }`.
+- `labelAt: <number>` — fraction `t ∈ [0, 1]` along the straight line between the two terminal coords. Centered above the line. Default offset `{ dx: 0, dy: -10 }`. Best for straight/orthogonal connectors; the numeric form doesn't follow curved paths.
+- `labelOffset: { dx?, dy? }` — fine-tune offset from the computed anchor point.
+
+`labelInfo` returns `null` (no label rendered) when the connector uses a raw `d:` path — labels need resolvable `from`/`to` endpoints. Fall back to a no-border text box at that location if you need a label on a curve.
+
+Style the label via the connector's `style`: a connector `{ style: "callout", label: "…" }` renders `<text class="connector-callout">`, themable in scoped CSS as `.diagram-name :deep(.connector-callout text) { ... }`.
+
 #### Theming
 
 The component bakes in: `currentColor` strokes, transparent fill defaulting to `var(--slidev-theme-bg)`, group rects dashed at 0.6 opacity, text using inherited font. Per-deck theming goes in the slide's `<style scoped>` block:
@@ -507,7 +552,8 @@ Caveat: thumbnails are 1600×900 PNGs that bake in the source theme — fine for
 Things the component does not (yet) do — work around with the strategies above:
 
 - **No obstacle avoidance.** A connector from A.right to C.left will draw straight through anything in between (e.g. a box B sitting on that line). Either route around with `via`/`route`, or move B, or accept the crossing.
-- **No animations between two states of the same element.** If a box needs to move or resize across clicks, declare two boxes with complementary `reveal` / `hideAt` ranges (no built-in tween).
+- **No animations between two states of the same element.** Text content can swap across clicks via `textByClick`, but if a box needs to *move* or *resize*, declare two boxes with complementary `reveal` / `hideAt` ranges (no built-in tween).
+- **Labels on raw `d:` paths.** Connector `label` requires resolvable `from`/`to` endpoints. For curved connectors written as raw SVG `d:` paths, add a no-border text box at the label location instead.
 
 ### Analysis annotations reference
 
