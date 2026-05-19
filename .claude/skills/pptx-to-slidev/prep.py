@@ -718,6 +718,80 @@ def _arrow_direction(line_el):
     return "none"
 
 
+_ANIM_PRESET_KIND = {
+    "entr": "entrance",
+    "exit": "exit",
+    "emph": "emphasis",
+    "path": "motion",
+}
+
+
+def extract_animations(root):
+    """Walk a slide's `<p:timing>` tree and return a list of click-group records.
+
+    Each record is `{kind: str, spids: [int, ...]}`. Click numbering is left to
+    the caller (we just return the groups in document order). `kind` is the
+    most common preset class within the group (`entrance` / `exit` /
+    `emphasis` / `motion`); when multiple kinds mix in one group, the
+    secondary counts are returned in `extra` as `{kind: count}`.
+    """
+    if root is None:
+        return []
+    timing = root.find("p:timing", NS)
+    if timing is None:
+        return []
+
+    groups = []
+    current = None
+
+    # Flat scan of every <p:cTn> in document order. clickEffect starts a new
+    # group; afterEffect/withEffect chain onto the current group.
+    for cTn in timing.iter("{%s}cTn" % NS["p"]):
+        node_type = cTn.attrib.get("nodeType")
+        if node_type not in ("clickEffect", "afterEffect", "withEffect"):
+            continue
+        preset_class = cTn.attrib.get("presetClass", "entr")
+        kind = _ANIM_PRESET_KIND.get(preset_class, preset_class or "entrance")
+
+        spids = []
+        for tgt in cTn.iter("{%s}spTgt" % NS["p"]):
+            sp = tgt.attrib.get("spid")
+            if sp:
+                spids.append(sp)
+
+        effect = {"kind": kind, "spids": spids}
+        if node_type == "clickEffect" or current is None:
+            groups.append({"effects": [effect]})
+            current = groups[-1]
+        else:
+            current["effects"].append(effect)
+
+    # Collapse each group's effects into a single record: dedup spids in order,
+    # pick the most common kind, and report any secondary kinds.
+    records = []
+    for g in groups:
+        seen = set()
+        spids_ordered = []
+        kind_counts = {}
+        for eff in g["effects"]:
+            kind_counts[eff["kind"]] = kind_counts.get(eff["kind"], 0) + 1
+            for sp in eff["spids"]:
+                if sp in seen:
+                    continue
+                seen.add(sp)
+                spids_ordered.append(sp)
+        if not spids_ordered:
+            continue
+        # Most common kind; ties broken by first appearance.
+        primary = max(kind_counts, key=lambda k: (kind_counts[k], -list(kind_counts).index(k)))
+        extra = {k: v for k, v in kind_counts.items() if k != primary}
+        rec = {"kind": primary, "spids": spids_ordered}
+        if extra:
+            rec["extra_kinds"] = extra
+        records.append(rec)
+    return records
+
+
 def parse_slide(zf, slide_path, rels_path, deck_size=DEFAULT_DECK):
     root = parse_xml(zf, slide_path)
     if root is None:
@@ -772,6 +846,7 @@ def parse_slide(zf, slide_path, rels_path, deck_size=DEFAULT_DECK):
     for cxn, transform in deferred_connectors:
         cnv = cxn.find("p:nvCxnSpPr/p:cNvPr", NS)
         name = cnv.attrib.get("name", "") if cnv is not None else ""
+        cxn_id = cnv.attrib.get("id") if cnv is not None else None
         prst = ""
         spPr = cxn.find("p:spPr", NS)
         line_el = None
@@ -806,6 +881,7 @@ def parse_slide(zf, slide_path, rels_path, deck_size=DEFAULT_DECK):
             end = fb_end
 
         record = {
+            "id": cxn_id,
             "name": name,
             "prst": prst,
             "kind": _classify_kind(prst),
@@ -823,9 +899,11 @@ def parse_slide(zf, slide_path, rels_path, deck_size=DEFAULT_DECK):
     for pic, transform in deferred_pictures:
         cnv = pic.find("p:nvPicPr/p:cNvPr", NS)
         name = cnv.attrib.get("name", "") if cnv is not None else ""
+        pic_id = cnv.attrib.get("id") if cnv is not None else None
         blip = pic.find(".//a:blip", NS)
         rid = blip.attrib.get("{%s}embed" % NS["r"], "") if blip is not None else ""
         record = {
+            "id": pic_id,
             "name": name,
             "bbox": apply_transform(get_xfrm(pic), transform),
             "file": image_refs.get(rid),
@@ -840,6 +918,7 @@ def parse_slide(zf, slide_path, rels_path, deck_size=DEFAULT_DECK):
         "connectors": connectors,
         "pictures": pictures,
         "tables": tables,
+        "_raw_animations": extract_animations(root),
     }
 
 
@@ -1366,6 +1445,93 @@ def _emit_diff(L, prev_slide, curr_slide, *, limit=40):
         emit_picture_list("removed pictures", p_removed)
 
 
+def _finalize_animations(slide):
+    """Filter the slide's raw animation groups to surviving shapes, assign
+    click numbers, and stash the result on the slide.
+
+    Returns the final list of `{click, kind, spids, extra_kinds?}` records
+    (also stored as `slide["animations"]` when non-empty). Strips the
+    `_raw_animations` intermediate either way so the emitted JSON stays tidy.
+    """
+    raw = slide.pop("_raw_animations", None) or []
+    # "Surviving" = the same gate the markdown shape listing uses (positioned
+    # bbox). PPTX animations can target shapes, pictures, or connectors — all
+    # share the slide-level cNvPr id namespace, so check every kind.
+    alive = set()
+    for sh in slide.get("shapes") or []:
+        sid = sh.get("id")
+        if sid and (sh.get("bbox") or {}).get("x") is not None:
+            alive.add(str(sid))
+    for pic in slide.get("pictures") or []:
+        pid = pic.get("id")
+        if pid and (pic.get("bbox") or {}).get("x") is not None:
+            alive.add(str(pid))
+    for cxn in slide.get("connectors") or []:
+        cid = cxn.get("id")
+        if cid and (cxn.get("bbox") or {}).get("x") is not None:
+            alive.add(str(cid))
+
+    final = []
+    click = 0
+    for grp in raw:
+        spids_str = [sp for sp in grp.get("spids", []) if sp in alive]
+        if not spids_str:
+            continue
+        # PPTX cNvPr ids are unsignedInt — emit numeric when parseable, fall
+        # back to the raw string token so we never lose a real target.
+        spids = []
+        for sp in spids_str:
+            try:
+                spids.append(int(sp))
+            except (TypeError, ValueError):
+                spids.append(sp)
+        click += 1
+        rec = {"click": click, "kind": grp.get("kind", "entrance"), "spids": spids}
+        if grp.get("extra_kinds"):
+            # Re-filter extra_kinds counts to nothing-special; keep as-is since
+            # they describe the *effects*, not the specific spids dropped above.
+            rec["extra_kinds"] = grp["extra_kinds"]
+        final.append(rec)
+
+    if final:
+        slide["animations"] = final
+    return final
+
+
+def _emit_animations(L, animations):
+    """Append a 🎬 PPTX animation annotation block to L. No-op if empty."""
+    if not animations:
+        return
+    n = len(animations)
+    L.append("")
+    L.append(
+        f"🎬 **PPTX animation** — {n} click{'s' if n != 1 else ''} built into "
+        f"this slide. Group elements by click when mapping to `v-click` / "
+        f"`revealAt`:"
+    )
+    for rec in animations:
+        spids = rec["spids"]
+        if len(spids) > 6:
+            shown = ", ".join(f"#{sp}" for sp in spids[:5])
+            extra = len(spids) - 5
+            spid_str = f"{shown} … and {extra} more"
+        elif len(spids) == 1:
+            spid_str = f"shape #{spids[0]}"
+        else:
+            spid_str = "shapes " + ", ".join(f"#{sp}" for sp in spids)
+
+        kind = rec.get("kind", "entrance")
+        extra_kinds = rec.get("extra_kinds") or {}
+        if extra_kinds:
+            extras = " + ".join(f"{v} {k}" for k, v in extra_kinds.items())
+            kind_tag = f" ({kind} + {extras})"
+        elif kind == "entrance":
+            kind_tag = " (entrance)"
+        else:
+            kind_tag = f" ({kind})"
+        L.append(f"- click {rec['click']}: {spid_str}{kind_tag}")
+
+
 def write_summary(path, analysis):
     L = []
     L.append(f"# PPTX analysis: {analysis['pptx']}")
@@ -1435,6 +1601,9 @@ def write_summary(path, analysis):
 
         _emit_diff(L, prev_slide, s)
         prev_slide = s
+
+        animations = _finalize_animations(s)
+        _emit_animations(L, animations)
 
         # Text paragraphs across all shapes
         text_paras = []

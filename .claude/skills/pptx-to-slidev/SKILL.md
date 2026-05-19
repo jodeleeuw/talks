@@ -575,6 +575,7 @@ Beyond the geometry/text dump and diff blocks, `_analysis.md` emits a few semant
 - `🔄 IMAGE-SWAP-REVEAL` (slide annotation) — same heading as previous slide but pictures changed. Collapse into one Slidev slide with click-gated image stacks.
 - `⚠ HIGHLIGHT-REVEAL` (slide annotation) — same text as previous slide but per-run formatting (strike, color, bold) changed. Collapse with `$clicks`-bound CSS classes.
 - `💡 Mermaid candidate (LR|TB)` (slide annotation) — see "When to use Mermaid instead" below.
+- `🎬 PPTX animation — N clicks built into this slide` (slide annotation, between the diff block and per-element listings) — the source slide has in-PPTX animations on its shapes (entrance, exit, emphasis, motion). The annotation lists each user-click group with its target spids and effect kind. **This is the highest-signal cue in the whole analysis**: you're not collapsing duplicate source slides into clicks; you're literally reading the click reveals the original author embedded into a single slide. Map every group to a `revealAt: N` on the corresponding shape/picture/connector. Note that animation targets can be pictures too (PPTX `<p:pic>` elements), which appear in the slide's `**Pictures:**` block — match the spid in the annotation against the shape's `#NNN` id or by position. See "Animated annotated photographs" below for the canonical recipe.
 - `🪄 Freeform/dense figure (N shapes, M with no text)` (slide annotation, near the top) — the slide is a hand-drawn drawing, freeform diagram, or decorative mesh (X/O on a board, network spaghetti). Trying to recreate this in `<Diagram>` is wasted effort — use `layout: image` with the source thumbnail. The accompanying suggestion in the annotation gives you the exact `<img>` path. Triggers when there are ≥ 12 positioned shapes, ≥ 55% have no text, AND there are ≥ 12 empty shapes in absolute terms (gates out perceptron-style schematics that hit the ratio early in their build).
 - `⛔ scene change` (diff-block header swap) — replaces the usual "treat the whole block as one click" hint. Fires when ≥ 70% of the prior slide's shapes are removed and at least one is added — i.e., slide N+1 is a fresh slide, not a build-up of slide N. **Do not** wrap the affected slides as `v-click` reveals; just author them as separate Slidev slides. Triggers when prior slide had ≥ 5 shapes.
 - `decorative slivers (cropped views of the same image, likely a parallax/stripe overlay; not load-bearing)` — surfaced both in the per-slide `**Pictures:**` block and inside `added pictures` / `removed pictures` diff entries. Means the source author tiled many thin cropped strips of a single image as background decor. Skip them entirely — render the un-cropped image as the slide background (e.g. via `layout: image-bg`) and ignore the slivers. The diff block's count in the `(N)` header stays accurate (semantic content unchanged); only the per-entry rendering collapses.
@@ -582,6 +583,82 @@ Beyond the geometry/text dump and diff blocks, `_analysis.md` emits a few semant
 **Multi-paragraph shape text.** When a shape has more than one paragraph, the per-slide listing emits a fenced block under the geometry line (not the inline `text='...'` form). Diff blocks still join with ` | ` because they need to be compact. Either way: one paragraph = one `<p>` (or one `lines[]` entry) when you author the slide.
 
 **Run-format tags.** Inside the per-paragraph breakdown, runs are tagged like `` [default] `` / `` [b+#FF0000] `` / `` [is] `` / `` [u] `` where letters mean: `b` bold, `i` italic, `s` strikethrough, `u` underline. They collapse into one token (`[bs]` = bold + strike) and a `+#RRGGBB` color suffix follows when present. Strike and underline pass through to your slide via GFM (`~~text~~` for strike) or inline CSS — no special component needed.
+
+### Animated annotated photographs
+
+When a slide has the `🎬 PPTX animation` annotation **and** the underlying content is a photograph (or other raster image) with overlay annotations — bounding-box callouts, stat readouts, arrows, labels — the canonical pattern is **HTML `<img>` for the raster layers + `<Diagram>` for the overlay shapes**, with click-driven reveals on whichever layers the annotation says are animated.
+
+The PPTX-export pipeline preserves the raster images as `image*.png` and the overlay shapes as positioned rectangles/roundRects in the analysis. The `🎬 PPTX animation` block tells you which spids enter on each click.
+
+Recipe (use the soccer-overlay slide from deck 09 as the reference shape):
+
+```md
+<script setup>
+import overlaySpec from './diagrams/<name>.json'
+</script>
+
+<div class="stage">
+  <!-- Always-visible raster: source background. -->
+  <img src="./image26.png" alt="Field" class="bg-base" />
+  <!-- Click-revealed raster: appears at the click PPTX puts it on. -->
+  <img src="./image9.png" alt="Players" class="bg-overlay" v-click="2" />
+  <!-- Diagram for the labeled boxes / connectors / arrows that overlay the photo. -->
+  <Diagram class="callouts" :spec="overlaySpec" />
+</div>
+
+<style scoped>
+/* Escape the default layout's padding so the photo is full-bleed. */
+:deep(.slidev-layout.josh-default) { padding: 0; }
+
+.stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: #000;
+}
+.stage img {
+  position: absolute;
+  object-fit: cover;
+}
+.stage .bg-base   { inset: 0; width: 100%; height: 100%; }
+/* (x, y) (w, h) from the analysis converted to percentages of the deck size. */
+.stage .bg-overlay {
+  left: 16.15%;     /* 155 / 960  */
+  top: 14.35%;      /* 77.5 / 540 */
+  width: 67.71%;    /* 650 / 960  */
+  height: 71.30%;   /* 385 / 540  */
+}
+.stage .callouts {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.callouts :deep(svg) { position: absolute; inset: 0; width: 100%; height: 100%; }
+/* per-shape theming via .box-<style> selectors */
+.callouts :deep(.box-callout rect) { stroke: #fff; stroke-width: 3; fill: transparent; }
+</style>
+```
+
+Where the spec file holds only the **overlay shapes** (no `background:` field) with `revealAt` clicks matching the `🎬` annotation's click groups:
+
+```jsonc
+{
+  "w": 960, "h": 540,
+  "boxes": [
+    { "id": "player-box", "shape": "roundRect", "x": 135.9, "y": 7.4, "w": 127.3, "h": 385.5, "style": "callout", "revealAt": 1 },
+    { "id": "ball-box",   "shape": "roundRect", "x": 410.8, "y": 454.7, "w": 84.0, "h": 81.5, "style": "callout", "revealAt": 1 },
+    { "id": "player-stats", "x": 263.2, "y": 93.9, "w": 336.1, "h": 97.6, "style": "stats", "revealAt": 1, "lines": ["player", "number: 3", …] },
+    { "id": "ball-stats",   "x": 499.2, "y": 438.7, "w": 336.1, "h": 97.6, "style": "stats", "revealAt": 1, "lines": ["ball", …] }
+  ]
+}
+```
+
+**Don't use the Diagram `background:` / `backgrounds:` field for raster photographs in slides like this.** The SVG `<image>` element renders dim or unevenly in some PDF export pipelines (Playwright + chromium). HTML `<img>` outside the SVG is more robust and inherits Vite's path resolution for free. The `background:` field is fine for diagrams whose only background is a programmatic pattern, a `data:` URI, or for screen-only viewing — but the HTML wrapper pattern above is what we ship.
+
+**Coordinate alignment:** the SVG and the `<img>` elements live in the same DOM box (`.stage`, which is the slide's content area). The Diagram's viewBox is `w × h` from the spec (deck size). The `<img>` positioning uses percentages of the same box, computed from the source coords in the analysis. They line up byte-for-byte if you do the math right.
+
+**Click ordering:** the `🎬` annotation lists user-clicks in source order. PPTX `clickEffect` starts a new user click; `afterEffect`/`withEffect` join the previous click (no extra user input). The annotation already shows them as `click 1:`, `click 2:` — copy those indices straight into `revealAt` / `v-click`.
 
 ### When to use Mermaid instead
 
