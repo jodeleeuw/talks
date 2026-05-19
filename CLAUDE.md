@@ -45,7 +45,7 @@ The Diagram spec uses `revealAt: N` / `reveal: { from, to }` for click-driven bu
 
 Structure:
 - `package.json` — `slidev-theme` keywords, `colorSchema: 'dark'`, font + `themeConfig` defaults.
-- `layouts/` — `default` (vertically centered), `cover`, `section`, `center`, `cover-day` (course-lecture opener: course/event mark, big question in the H1 slot, discussion prompt in the `::discussion::` named slot), `media` (text + dominant media — `::media::` slot accepts `<img>`, `<Youtube>`, `<iframe>`, `<video>`, etc.; props: `side`, `bleed`, `caption`), `aside` (main + sidebar definition), `quote` (decorative bigmark + ::attribution::), `outro` (closer with optional ::next:: housekeeping), `gallery` (2-6-image grid via named slots `::a::`–`::f::` plus optional `::overlay::` for a centered card; props: `cols`, `fit`, `gap`, `radius`, `bleed`), `image-bg` (full-bleed background image with overlaid text; props: `image`, `align`, `darken`, `position`, `tint`).
+- `layouts/` — `default` (vertically centered), `cover`, `section`, `center`, `cover-day` (course-lecture opener: course/event mark, big question in the H1 slot, discussion prompt in the `::discussion::` named slot), `media` (text + dominant media — `::media::` slot accepts `<img>`, `<Youtube>`, `<iframe>`, `<video>`, etc.; props: `side`, `bleed`, `caption`), `aside` (main + sidebar definition), `quote` (decorative bigmark + ::attribution::), `outro` (closer with optional ::next:: housekeeping), `gallery` (2-6-image grid via named slots `::a::`–`::f::` plus optional `::overlay::` for a centered card; props: `cols`, `fit`, `gap`, `radius`, `bleed`), `image-bg` (full-bleed background image with overlaid text; props: `image`, `align`, `darken`, `position`, `tint`), `image` (full image with optional `caption` and `captionPosition: 'top' | 'bottom'`; use for naked thumbnails or oversized figures), `panel` (top-anchored title + flex body — use whenever a slide has a tall `<DataTable>`, `<Diagram>`, or chart that would push the H1 off-screen under `default`'s vertical-centering; props: `align: 'left' | 'center'`, `gap`).
 - `styles/layout.css` + `code.css` — design tokens (`--josh-bg`, `--josh-fg`, `--josh-accent`, etc.), type scale, base layout. `.slidev-layout` sets `display: flex; flex-direction: column; justify-content: center; height: 100%` so content centers vertically by default.
 - `components/Hi.vue` — inline keyword highlight: `<Hi>word</Hi>` (or `variant="solid|box"`).
 - `components/DataTable.vue` — styled table for truth tables and small data grids: `<DataTable :headers="['A','B']" :rows="[[0,1],[1,0]]" :highlight-row="1" :highlight-col="0" />`. Monospace by default (`mono="false"` to switch off).
@@ -61,12 +61,13 @@ themeConfig:
   date: Spring 2026
 ```
 
-Per-slide `footer: false` (or `footer: "custom text"`) overrides; `cover`, `section`, `end`, `cover-day`, `outro`, `image-bg`, and `gallery` layouts auto-hide it (see the `HIDE_ON` set in `global-top.vue`).
+Per-slide `footer: false` (or `footer: "custom text"`) overrides; `cover`, `section`, `end`, `cover-day`, `outro`, `image-bg`, and `gallery` layouts auto-hide it (see the `HIDE_ON` set in `global-top.vue`). `panel` keeps the footer (it's a content layout).
 
 Non-obvious gotchas:
 
 - **The footer lives in `global-top.vue`, not `global-bottom.vue`.** Slidev's `<GlobalBottom />` renders *before* `<SlidesShow>` in the DOM (stacking behind slides), so anything in `global-bottom.vue` gets covered when slides have an opaque background — you see it flash through during fade transitions, then disappear. `global-top.vue` renders after slides so it stacks on top. The name describes z-order, not screen position.
 - **Always set `layout: cover` explicitly on slide 1.** Slidev's `currentLayout` composable falls back to `'cover'` for slide 1 when `meta.layout` is missing, but that fallback depends on `currentSlideNo` which races with `currentSlideRoute` during navigation. Explicit layout eliminates the race and the resulting footer flicker.
+- **UnoCSS preflight strips `ol`/`ul` markers globally.** The `default`, `panel`, and `center` layouts each re-assert `list-style: decimal | disc; padding-left: 1.5rem` via scoped `:deep(ol)` / `:deep(ul)` rules so plain markdown numbered/bulleted lists render with visible markers. The `aside` and `outro` layouts deliberately use `list-style: none` with their own `::before` arrow markers and win at equal specificity inside their own components. If you add a new layout, copy the list-fix block from `default.vue`.
 - **Don't read layout via `nav.currentLayout`** in components — use `nav.currentSlideRoute.value?.meta?.layout` directly, for the same race reason.
 
 ## prep.py architecture

@@ -64,8 +64,10 @@ If thumbnails aren't present (local PPTX with no Slides URL, or `--no-thumbnails
 | Single centered headline / call-to-action | `center` |
 | Image + text side-by-side | `media` (theme-josh) — `side: left|right`, optional `caption` |
 | 2–6 images in a grid / mosaic | `gallery` (theme-josh) — named slots `::a::`–`::f::`, optional `::overlay::` for a centered card |
-| Full-bleed background image with overlaid text | `image-bg` (theme-josh) — props `image`, `align`, `darken`, `position`, `tint` |
-| Truth table / small data grid | default layout + `<DataTable :headers :rows :highlight-row :highlight-col />` |
+| Full-bleed background image with overlaid text | `image-bg` (theme-josh) — props `image`, `align`, `darken`, `position`, `tint`. **For photographs only** — never for data viz / charts (the overlay text lands on top of the chart). |
+| Title pinned at top + tall content (table, chart, big diagram) | `panel` (theme-josh) — props `align: 'left' \| 'center'`, `gap`. Use whenever `default`'s vertical-centering would push the H1 off-screen. |
+| Naked source thumbnail (hand-drawn figure, freeform diagram) | `image` (theme-josh) — props `image`, optional `caption`, `captionPosition: 'top' \| 'bottom'`. The caption gets a scrim background so it stays readable over any image edge. |
+| Truth table / small data grid | `panel` + `<DataTable :headers :rows :highlight-row :highlight-col />` (so the H1 stays anchored above the table) |
 | Closing slide ("thanks", "questions") | `end` or `outro` (theme-josh) |
 | Ordinary content slide | (no layout — use the default) |
 

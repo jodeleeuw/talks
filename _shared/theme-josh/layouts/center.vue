@@ -42,4 +42,29 @@ import FitContent from '../components/FitContent.vue'
   font-size: 1.6rem;
   line-height: 1.5;
 }
+
+/* Re-assert list markers (UnoCSS preflight strips them). */
+.center-body :deep(ol) {
+  list-style: decimal;
+  padding-left: 1.5rem;
+  text-align: left;
+  display: inline-block;
+}
+
+.center-body :deep(ul) {
+  list-style: disc;
+  padding-left: 1.5rem;
+  text-align: left;
+  display: inline-block;
+}
+
+.center-body :deep(li) {
+  margin: 0.5rem 0;
+  font-size: 1.4rem;
+  line-height: 1.5;
+}
+
+.center-body :deep(li::marker) {
+  color: var(--josh-fg-soft);
+}
 </style>
