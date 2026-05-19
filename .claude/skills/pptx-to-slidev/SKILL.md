@@ -210,6 +210,10 @@ import spec from './diagrams/my-diagram.json'
 ```jsonc
 {
   "w": 960, "h": 540,             // deck size from the analysis header (SVG viewBox)
+  "background": { "src": "./photo.png", "x": 0, "y": 0, "w": 960, "h": 540 },  // optional — SVG <image> behind everything. See note below
+  "backgrounds": [                // optional — array form for multiple layered backgrounds
+    { "src": "./layer.png", "x": 100, "y": 50, "w": 760, "h": 440, "opacity": 0.8, "revealAt": 2 }
+  ],
   "groups": [                     // optional, rendered behind boxes (encoder/decoder containers, etc.)
     { "id": "g1", "x": 100, "y": 380, "w": 200, "h": 80, "text": "ENCODER", "style": "..." }
   ],
@@ -258,6 +262,7 @@ import spec from './diagrams/my-diagram.json'
 | value | renders | notes |
 | --- | --- | --- |
 | omitted | rectangle | default — uses `rx` for corner radius (default 3) |
+| `"roundRect"` | rounded rectangle | default `rx = min(min(w, h) * 0.15, 30)`; explicit `rx` still overrides. Matches PPTX `<a:prstGeom prst="roundRect">`. |
 | `"ellipse"` | ellipse / circle | radius is half the bbox in each axis |
 | `"arrow"` / `"rightArrow"` | chunky horizontal arrow → | stem 65% of width × 50% of height; head fills the remaining width and full height |
 | `"leftArrow"` | chunky horizontal arrow ← | mirror of rightArrow |
@@ -267,6 +272,10 @@ import spec from './diagrams/my-diagram.json'
 PPTX exports the four arrow variants as native shapes (`<a:prstGeom prst="downArrow">` etc.); the analysis surfaces them on the shape line so you can copy `shape: "downArrow"` directly. Snap references (`box.top` / `bottom` / `left` / `right` / `center`) resolve to the bbox edges, not the arrow's silhouette — connectors anchored to an arrow box land at the bbox edge, just like any rect.
 
 Text inside an arrow centers within the stem portion (not the head triangle), so labels read cleanly along the shaft.
+
+**Backgrounds:** the top-level `background` (single) or `backgrounds` (array) fields render `<image>` elements underneath every group/connector/box in the SVG. Each entry takes `src`, `x`, `y`, `w`, `h`, optional `opacity` (default `1`), and all the reveal forms (`revealAt` / `reveal: { from, to }` / `reveal: { from, until }` / `hideAt`). `background` is sugar for prepending to `backgrounds`. Use both together; they merge.
+
+**Caveat — SVG `<image>` vs HTML `<img>`:** the `background` field works fine for screen rendering but can render dim or be omitted entirely by Playwright + Chromium under some PDF export configurations. **For photographic backgrounds in slides you plan to export to PDF, prefer the HTML `<img>` recipe in the "Animated annotated photographs" section** — wrap the slide in a `.stage` div, put `<img>` elements with `v-click` directives behind the `<Diagram>`, and keep the spec to overlay shapes only. The `background` field is still useful for programmatic patterns, `data:` URIs, or live-only viewing, but the HTML wrapper is what we recommend for production decks.
 
 **Anchor:** by default `(x, y)` is the box's **top-left corner** (matching the analysis output). Set `anchor` to reposition where `(x, y)` lands on the box — handy when you want to center a box on a known point or align it to a corner. Supported values: `top-left` (default), `top`, `top-right`, `left`, `center`, `right`, `bottom-left`, `bottom`, `bottom-right`. The 9-position grid corresponds to the same edge/corner names used by snap references on the other side. Example:
 

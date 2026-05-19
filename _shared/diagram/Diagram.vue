@@ -70,6 +70,16 @@ const boxes = computed(() => normalize(props.spec.boxes, rawLookup.value))
 const groups = computed(() => normalize(props.spec.groups, rawLookup.value))
 const connectors = computed(() => props.spec.connectors ?? [])
 
+// `background` (single object) is syntactic sugar that prepends to `backgrounds`.
+// Both fields render as <image> elements under groups/connectors/boxes, sharing
+// the SVG's viewBox so annotations and raster live in one coordinate system.
+const backgrounds = computed(() => {
+  const out = []
+  if (props.spec.background) out.push(props.spec.background)
+  if (Array.isArray(props.spec.backgrounds)) out.push(...props.spec.backgrounds)
+  return out
+})
+
 const lookup = computed(() => {
   const m = new Map()
   for (const b of boxes.value) if (b.id) m.set(b.id, b)
@@ -427,6 +437,23 @@ function isArrowShape(item) {
   return arrowDirection(item.shape) != null
 }
 
+// `shape: "roundRect"` renders through the same <rect> branch as the default,
+// but with a default `rx` that visibly rounds the corners — matches PPTX's
+// `prstGeom prst="roundRect"`. Explicit `rx` on the spec still wins.
+// Snap refs continue to resolve to the bbox edges (same as rect/ellipse/arrow).
+const ROUND_RECT_RX_FRAC = 0.15
+const ROUND_RECT_RX_MAX = 30
+function isRoundRect(item) {
+  return item.shape === 'roundRect'
+}
+function rectRx(item, fallback) {
+  if (item.rx != null) return item.rx
+  if (isRoundRect(item)) {
+    return Math.min(Math.min(item.w, item.h) * ROUND_RECT_RX_FRAC, ROUND_RECT_RX_MAX)
+  }
+  return fallback
+}
+
 function arrowPoints(item) {
   const { x, y, w, h } = item
   const dir = arrowDirection(item.shape)
@@ -569,11 +596,19 @@ const wrapStyle = computed(() => {
 <marker id="diagram-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="currentColor" /></marker>
 <marker id="diagram-arrow-start" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 10 0 L 0 5 L 10 10 Z" fill="currentColor" /></marker>
 </defs>
+<template v-for="(bg, bi) in backgrounds" :key="`bg-${bi}`">
+<g v-if="isHideMode(bg)" v-click-hide="hideDirective(bg)" class="background">
+<image :href="bg.src" :x="bg.x" :y="bg.y" :width="bg.w" :height="bg.h" :opacity="bg.opacity ?? 1" preserveAspectRatio="none" />
+</g>
+<g v-else v-click="clickDirective(bg)" class="background">
+<image :href="bg.src" :x="bg.x" :y="bg.y" :width="bg.w" :height="bg.h" :opacity="bg.opacity ?? 1" preserveAspectRatio="none" />
+</g>
+</template>
 <template v-for="g in groups" :key="`g-${g.id}`">
 <g v-if="isHideMode(g)" v-click-hide="hideDirective(g)" :class="['group', g.style ? `group-${g.style}` : null]">
 <ellipse v-if="g.shape === 'ellipse'" :cx="g.x + g.w / 2" :cy="g.y + g.h / 2" :rx="g.w / 2" :ry="g.h / 2" />
 <polygon v-else-if="isArrowShape(g)" :points="arrowPoints(g)" />
-<rect v-else :x="g.x" :y="g.y" :width="g.w" :height="g.h" :rx="g.rx ?? 4" />
+<rect v-else :x="g.x" :y="g.y" :width="g.w" :height="g.h" :rx="rectRx(g, 4)" />
 <template v-if="textByClickStates(g).length">
 <template v-for="(state, si) in textByClickStates(g)" :key="`s-${si}`">
 <g v-if="state.mode === 'hide-at'" v-click-hide="state.value">
@@ -614,7 +649,7 @@ const wrapStyle = computed(() => {
 <g v-else v-click="clickDirective(g)" :class="['group', g.style ? `group-${g.style}` : null]">
 <ellipse v-if="g.shape === 'ellipse'" :cx="g.x + g.w / 2" :cy="g.y + g.h / 2" :rx="g.w / 2" :ry="g.h / 2" />
 <polygon v-else-if="isArrowShape(g)" :points="arrowPoints(g)" />
-<rect v-else :x="g.x" :y="g.y" :width="g.w" :height="g.h" :rx="g.rx ?? 4" />
+<rect v-else :x="g.x" :y="g.y" :width="g.w" :height="g.h" :rx="rectRx(g, 4)" />
 <template v-if="textByClickStates(g).length">
 <template v-for="(state, si) in textByClickStates(g)" :key="`s-${si}`">
 <g v-if="state.mode === 'hide-at'" v-click-hide="state.value">
@@ -667,7 +702,7 @@ const wrapStyle = computed(() => {
 <g v-if="isHideMode(b)" v-click-hide="hideDirective(b)" :class="['box', b.style ? `box-${b.style}` : null]">
 <ellipse v-if="b.shape === 'ellipse'" :cx="b.x + b.w / 2" :cy="b.y + b.h / 2" :rx="b.w / 2" :ry="b.h / 2" :style="b.fill ? { fill: b.fill } : null" />
 <polygon v-else-if="isArrowShape(b)" :points="arrowPoints(b)" :style="b.fill ? { fill: b.fill } : null" />
-<rect v-else :x="b.x" :y="b.y" :width="b.w" :height="b.h" :rx="b.rx ?? 3" :style="b.fill ? { fill: b.fill } : null" />
+<rect v-else :x="b.x" :y="b.y" :width="b.w" :height="b.h" :rx="rectRx(b, 3)" :style="b.fill ? { fill: b.fill } : null" />
 <template v-if="textByClickStates(b).length">
 <template v-for="(state, si) in textByClickStates(b)" :key="`s-${si}`">
 <g v-if="state.mode === 'hide-at'" v-click-hide="state.value">
@@ -708,7 +743,7 @@ const wrapStyle = computed(() => {
 <g v-else v-click="clickDirective(b)" :class="['box', b.style ? `box-${b.style}` : null]">
 <ellipse v-if="b.shape === 'ellipse'" :cx="b.x + b.w / 2" :cy="b.y + b.h / 2" :rx="b.w / 2" :ry="b.h / 2" :style="b.fill ? { fill: b.fill } : null" />
 <polygon v-else-if="isArrowShape(b)" :points="arrowPoints(b)" :style="b.fill ? { fill: b.fill } : null" />
-<rect v-else :x="b.x" :y="b.y" :width="b.w" :height="b.h" :rx="b.rx ?? 3" :style="b.fill ? { fill: b.fill } : null" />
+<rect v-else :x="b.x" :y="b.y" :width="b.w" :height="b.h" :rx="rectRx(b, 3)" :style="b.fill ? { fill: b.fill } : null" />
 <template v-if="textByClickStates(b).length">
 <template v-for="(state, si) in textByClickStates(b)" :key="`s-${si}`">
 <g v-if="state.mode === 'hide-at'" v-click-hide="state.value">
