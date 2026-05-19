@@ -1045,6 +1045,108 @@ def _shape_text(sh):
     return " | ".join(p["text"] for p in sh.get("text", []))
 
 
+# Thresholds for the "freeform / hand-drawn figure" heuristic. A slide with
+# this many positioned shapes, at least this fraction lacking any text, AND
+# this many empty shapes in absolute terms is almost always a decorative
+# drawing (chalkboard X/O, neural-net mesh, …) that isn't worth recreating in
+# `<Diagram>` — the source thumbnail is the better rendering.
+#
+# Three-gate design tuned against the "Why is AI useful for thinking about
+# biological intelligence" deck: catches slide 11 (X/O game, 30 shapes / 18
+# empty) and slide 36 (network mesh, 17 / 16) without firing on perceptron
+# build-up slides 29–35 (≤ 16 shapes, ≤ 7 empty). The absolute `_MIN_EMPTY`
+# gate is what stops the perceptron slides from sliding through purely on
+# their early-build ratios.
+_FREEFORM_MIN_SHAPES = 12
+_FREEFORM_EMPTY_RATIO = 0.55
+_FREEFORM_MIN_EMPTY = 12
+
+
+def _freeform_figure_stats(slide):
+    """Return (n_shapes, n_empty, is_freeform) for the freeform-figure heuristic.
+
+    Only counts positioned shapes (those that survive the diff/emit gate
+    `bbox.x is not None`). Tables, pictures, and connectors are *not* shapes
+    here — they live on their own slide-level lists. An "empty" shape is one
+    where every paragraph's text is whitespace-only.
+    """
+    shapes = [
+        s for s in (slide.get("shapes") or [])
+        if (s.get("bbox") or {}).get("x") is not None
+    ]
+    n_shapes = len(shapes)
+    if n_shapes == 0:
+        return (0, 0, False)
+    n_empty = 0
+    for s in shapes:
+        if not any(p.get("text", "").strip() for p in s.get("text", []) or []):
+            n_empty += 1
+    ratio = n_empty / n_shapes
+    is_freeform = (
+        n_shapes >= _FREEFORM_MIN_SHAPES
+        and ratio >= _FREEFORM_EMPTY_RATIO
+        and n_empty >= _FREEFORM_MIN_EMPTY
+    )
+    return (n_shapes, n_empty, is_freeform)
+
+
+# Thresholds for the "decorative sliver" heuristic. PPTX decks sometimes
+# overlay many thin cropped strips of one image to fake a parallax/stripe
+# effect; the analysis dutifully lists each strip but they add no information
+# and crowd out the actual content. We only collapse when there's a meaningful
+# pile of slivers AND most of them are aggressively cropped — false positives
+# that suppress real content are worse than false negatives that leave them in.
+_SLIVER_MIN_COUNT = 5
+_SLIVER_CROP_MIN = 50.0   # % inset on at least one edge
+_SLIVER_CROP_FRAC = 0.80  # share of group members that must meet that crop bar
+
+
+def _is_sliver(pic):
+    """True if a picture has any edge inset >= _SLIVER_CROP_MIN%."""
+    crop = pic.get("crop") or {}
+    if not crop:
+        return False
+    return any(
+        (crop.get(edge) or 0) > _SLIVER_CROP_MIN for edge in ("l", "t", "r", "b")
+    )
+
+
+def _sliver_groups(pictures):
+    """Group pictures by filename and return {file: [sliver_pic, …]} for groups
+    that look like decorative-sliver overlays.
+
+    A group qualifies when it has >= _SLIVER_MIN_COUNT slivers AND >=
+    _SLIVER_CROP_FRAC of the same-file pictures are slivers. Uncropped (or
+    mildly cropped) instances of the same file are NOT included in the
+    returned list — those still emit normally.
+    """
+    if not pictures:
+        return {}
+    by_file = {}
+    for p in pictures:
+        f = p.get("file")
+        if not f:
+            continue
+        by_file.setdefault(f, []).append(p)
+    groups = {}
+    for f, group in by_file.items():
+        slivers = [p for p in group if _is_sliver(p)]
+        if (
+            len(slivers) >= _SLIVER_MIN_COUNT
+            and len(slivers) / len(group) >= _SLIVER_CROP_FRAC
+        ):
+            groups[f] = slivers
+    return groups
+
+
+# Thresholds for the "scene change" annotation on a diff block. When slide N+1
+# wipes most of slide N's shapes and adds new ones, it's a fresh slide that
+# happens to come after — not a build-up. The skill's "one diff = one click"
+# rule doesn't apply; the author needs to see that explicitly.
+_SCENE_CHANGE_MIN_PRIOR = 5
+_SCENE_CHANGE_REMOVED_RATIO = 0.7
+
+
 def _shape_pos_key(sh):
     bb = sh.get("bbox") or {}
     return (
@@ -1170,11 +1272,32 @@ def _emit_diff(L, prev_slide, curr_slide, *, limit=40):
     if total == 0:
         return
 
-    L.append("")
-    L.append(
-        f"**Diff from slide {prev_slide['index']}** "
-        f"(if this is a build-up, treat the whole block as **one click** — every entry below shares the same `revealAt`):"
+    # Scene-change detection: if slide N+1 wipes most of slide N's shapes, the
+    # "one diff = one click" build-up rule doesn't apply. Swap the header so
+    # the author knows to treat this transition as a fresh slide.
+    n_prior = len(prev_shapes)
+    n_added = len(s_added)
+    n_removed = len(s_removed)
+    removed_ratio = n_removed / max(n_prior, 1)
+    scene_change = (
+        n_prior >= _SCENE_CHANGE_MIN_PRIOR
+        and removed_ratio >= _SCENE_CHANGE_REMOVED_RATIO
+        and n_added >= 1
     )
+    curr_slide["scene_change"] = scene_change
+
+    L.append("")
+    if scene_change:
+        L.append(
+            f"**Diff from slide {prev_slide['index']}** "
+            f"⛔ **scene change** (≥70% of prior shapes removed — treat slide "
+            f"{curr_slide['index']} as a fresh slide, NOT a build-up click):"
+        )
+    else:
+        L.append(
+            f"**Diff from slide {prev_slide['index']}** "
+            f"(if this is a build-up, treat the whole block as **one click** — every entry below shares the same `revealAt`):"
+        )
 
     def emit_list(label, items, formatter):
         L.append(f"- {label} ({len(items)}):")
@@ -1182,6 +1305,37 @@ def _emit_diff(L, prev_slide, curr_slide, *, limit=40):
             L.append(f"  - {formatter(it)}")
         if len(items) > limit:
             L.append(f"  - … and {len(items) - limit} more (see full shape list below)")
+
+    def emit_picture_list(label, items):
+        """Like emit_list, but collapses decorative-sliver groups into one
+        summary line per source file. The count in the header is the *real*
+        item count (unchanged) so the click semantics stay inspectable; only
+        the per-entry rendering changes.
+        """
+        groups = _sliver_groups(items)
+        if not groups:
+            emit_list(label, items, _picture_one_line)
+            return
+        sliver_ids = set()
+        for fname, slivers in groups.items():
+            for s in slivers:
+                sliver_ids.add(id(s))
+        L.append(f"- {label} ({len(items)}):")
+        # Emit non-sliver pictures normally (truncated to `limit`); then emit
+        # one summary line per collapsed sliver group. We don't count the
+        # summary lines against `limit` — collapsing the slivers is the
+        # whole point.
+        non_slivers = [it for it in items if id(it) not in sliver_ids]
+        for it in non_slivers[:limit]:
+            L.append(f"  - {_picture_one_line(it)}")
+        if len(non_slivers) > limit:
+            L.append(f"  - … and {len(non_slivers) - limit} more (see full picture list below)")
+        for fname, slivers in groups.items():
+            L.append(
+                f"  - `{fname}` — {len(slivers)} decorative slivers "
+                f"(cropped views of the same image, likely a parallax/stripe "
+                f"overlay; not load-bearing)"
+            )
 
     if s_added:
         emit_list("added shapes", s_added, _shape_one_line)
@@ -1207,9 +1361,9 @@ def _emit_diff(L, prev_slide, curr_slide, *, limit=40):
     if c_removed:
         emit_list("removed connectors", c_removed, _connector_one_line)
     if p_added:
-        emit_list("added pictures", p_added, _picture_one_line)
+        emit_picture_list("added pictures", p_added)
     if p_removed:
-        emit_list("removed pictures", p_removed, _picture_one_line)
+        emit_picture_list("removed pictures", p_removed)
 
 
 def write_summary(path, analysis):
@@ -1250,6 +1404,17 @@ def write_summary(path, analysis):
         if s.get("thumbnail"):
             L.append("")
             L.append(f"**Source:** `{s['thumbnail']}` — read this PNG first.")
+
+        n_shapes_ff, n_empty_ff, is_freeform = _freeform_figure_stats(s)
+        s["freeform_figure"] = is_freeform
+        if is_freeform:
+            L.append("")
+            L.append(
+                f"🪄 **Freeform/dense figure** ({n_shapes_ff} shapes, "
+                f"{n_empty_ff} with no text) — likely hand-drawn or "
+                f"decorative; consider `<img src=\"./_thumbnails/slide-"
+                f"{s['index']}.png\">` over `<Diagram>`."
+            )
 
         plain = _slide_plain_text(s)
         sig = _slide_format_signature(s)
@@ -1296,7 +1461,17 @@ def write_summary(path, analysis):
         if pics:
             L.append("")
             L.append("**Pictures:**")
+            sliver_groups = _sliver_groups(pics)
+            sliver_ids = set()
+            for fname, slivers in sliver_groups.items():
+                for sl in slivers:
+                    sliver_ids.add(id(sl))
+            s["sliver_groups"] = (
+                {f: len(g) for f, g in sliver_groups.items()} or None
+            )
             for pic in pics:
+                if id(pic) in sliver_ids:
+                    continue
                 bb = pic.get("bbox") or {}
                 placeholder_tag = (
                     "  ⚠ **video placeholder** — skip this picture and embed the matching video below instead"
@@ -1318,6 +1493,12 @@ def write_summary(path, analysis):
                         f"`img {{ width: {crop['img_width_pct']}%; height: {crop['img_height_pct']}%; "
                         f"left: {crop['img_left_pct']}%; top: {crop['img_top_pct']}%; }}`"
                     )
+            for fname, slivers in sliver_groups.items():
+                L.append(
+                    f"- `{fname}` — {len(slivers)} decorative slivers "
+                    f"(cropped views of the same image, likely a parallax/"
+                    f"stripe overlay; not load-bearing)"
+                )
 
         tbls = s.get("tables") or []
         if tbls:
@@ -1589,9 +1770,12 @@ def main():
     }
     json_path = os.path.join(dest_dir, "_analysis.json")
     md_path = os.path.join(dest_dir, "_analysis.md")
+    # write_summary stashes derived fields (`freeform_figure`, `sliver_groups`,
+    # `scene_change`) on each slide dict; emit the JSON afterwards so those
+    # surface there too.
+    write_summary(md_path, analysis)
     with open(json_path, "w") as f:
         json.dump(analysis, f, indent=2)
-    write_summary(md_path, analysis)
 
     print(f"Scaffolded: {dest_dir}")
     print(f"  Slides parsed:    {len(slides)}")

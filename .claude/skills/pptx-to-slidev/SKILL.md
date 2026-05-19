@@ -523,6 +523,7 @@ The component bakes in: `currentColor` strokes, transparent fill defaulting to `
 
 The component is great for **graph-shaped** diagrams: 5–15 labeled boxes connected by snap-routed arrows, where the spatial arrangement matters but the visual style doesn't. It's *not* the right tool for everything in the deck. Bail and use the source PNG as an `<img>` when:
 
+- The slide is flagged with the `🪄 Freeform/dense figure` annotation — prep.py already decided this isn't graph-shaped, take the hint.
 - The diagram has **more than ~15 shapes** and you're scaffolding from scratch — the JSON authoring cost dominates.
 - The source uses **decorative imagery as load-bearing content** (the reduction ladder has hand-drawn animal silhouettes next to each "scale" label; the cognitive-mapping deck has a brain with arrows pointing into specific regions). Recreating those in SVG loses the point.
 - The source is **rasterized SmartArt / Visio / clipart** that came across as one `image*.png`. Don't try to reverse-engineer it; just place the image.
@@ -535,13 +536,11 @@ The component is great for **graph-shaped** diagrams: 5–15 labeled boxes conne
 ---
 layout: image
 image: ./_thumbnails/slide-11.png
-fit: contain
+caption: "Tic-tac-toe as a symbol system: board state plus a set of legal actions."
 ---
-
-# The neural circuit
 ```
 
-(or use `<img src="./_thumbnails/slide-11.png" />` in a custom layout if you want text alongside).
+(`caption` and `captionPosition: 'top' | 'bottom'` are optional; the caption gets a scrim background so it stays readable over any image edge.)
 
 Caveat: thumbnails are 1600×900 PNGs that bake in the source theme — fine for content slides but won't match your Slidev theme. So use the thumbnail when fidelity matters more than theming. For diagrams you *want* themed, do the `<Diagram>` work.
 
@@ -567,6 +566,9 @@ Beyond the geometry/text dump and diff blocks, `_analysis.md` emits a few semant
 - `🔄 IMAGE-SWAP-REVEAL` (slide annotation) — same heading as previous slide but pictures changed. Collapse into one Slidev slide with click-gated image stacks.
 - `⚠ HIGHLIGHT-REVEAL` (slide annotation) — same text as previous slide but per-run formatting (strike, color, bold) changed. Collapse with `$clicks`-bound CSS classes.
 - `💡 Mermaid candidate (LR|TB)` (slide annotation) — see "When to use Mermaid instead" below.
+- `🪄 Freeform/dense figure (N shapes, M with no text)` (slide annotation, near the top) — the slide is a hand-drawn drawing, freeform diagram, or decorative mesh (X/O on a board, network spaghetti). Trying to recreate this in `<Diagram>` is wasted effort — use `layout: image` with the source thumbnail. The accompanying suggestion in the annotation gives you the exact `<img>` path. Triggers when there are ≥ 12 positioned shapes, ≥ 55% have no text, AND there are ≥ 12 empty shapes in absolute terms (gates out perceptron-style schematics that hit the ratio early in their build).
+- `⛔ scene change` (diff-block header swap) — replaces the usual "treat the whole block as one click" hint. Fires when ≥ 70% of the prior slide's shapes are removed and at least one is added — i.e., slide N+1 is a fresh slide, not a build-up of slide N. **Do not** wrap the affected slides as `v-click` reveals; just author them as separate Slidev slides. Triggers when prior slide had ≥ 5 shapes.
+- `decorative slivers (cropped views of the same image, likely a parallax/stripe overlay; not load-bearing)` — surfaced both in the per-slide `**Pictures:**` block and inside `added pictures` / `removed pictures` diff entries. Means the source author tiled many thin cropped strips of a single image as background decor. Skip them entirely — render the un-cropped image as the slide background (e.g. via `layout: image-bg`) and ignore the slivers. The diff block's count in the `(N)` header stays accurate (semantic content unchanged); only the per-entry rendering collapses.
 
 **Multi-paragraph shape text.** When a shape has more than one paragraph, the per-slide listing emits a fenced block under the geometry line (not the inline `text='...'` form). Diff blocks still join with ` | ` because they need to be compact. Either way: one paragraph = one `<p>` (or one `lines[]` entry) when you author the slide.
 
