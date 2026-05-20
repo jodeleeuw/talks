@@ -7,3 +7,4 @@ tmp_talks/
 *.videos.json
 *.thumbnails/
 .venv/
+.claude/scheduled_tasks.lock
