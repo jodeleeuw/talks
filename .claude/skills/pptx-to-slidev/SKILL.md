@@ -33,7 +33,7 @@ The script will:
 
 After the script runs, **read `_analysis.md`** end-to-end **and read the per-slide `_thumbnails/slide-N.png` for any slide that's non-trivial** — the PNG shows you what raw coordinates can't. Delete `_analysis.json`, `_analysis.md`, and `_thumbnails/` once you're done with them.
 
-The file opens with a `## Contents` table-of-contents — one line per slide with the slide's title (or first paragraph) and any annotation icons it has (`🪄`, `🎬×N`, `🔄`, `🔁`, `⚠`, `⛔`, `⛔text-swap`, `💡<dir>`). Scan the TOC first to spot the high-signal slides; then read those slides' detail blocks. Also: when a slide's shape geometry is identical to the previous slide's, the `**Shapes (px in deck coords):**` block elides with `_(identical to slide N)_` rather than repeating — the diff block above carries the per-transition signal.
+The file opens with a `## Contents` table-of-contents — one line per slide with the slide's title (or first paragraph) and any annotation icons it has (`🪄`, `🎬×N`, `🔄`, `🔁`, `⚠`, `⛔`, `⛔text-swap`, `💡<dir>`, `🪧`). Scan the TOC first to spot the high-signal slides; then read those slides' detail blocks. Also: when a slide's shape geometry is identical to the previous slide's, the `**Shapes (px in deck coords):**` block elides with `_(identical to slide N)_` rather than repeating — the diff block above carries the per-transition signal.
 
 The `vite.config.ts` extends Vite's `server.fs.allow` to include the repo root so the deck can import the shared `_shared/diagram/Diagram.vue`. The `components/Diagram.vue` wrapper auto-registers `<Diagram>` globally for every slide via Slidev's `components/` auto-import.
 
@@ -54,7 +54,8 @@ If thumbnails aren't present (local PPTX with no Slides URL, or `--no-thumbnails
 3. Decide each slide's Slidev layout (see table below).
 4. Replace the template's placeholder `slides.md` with your converted deck.
 5. Verify the build: `cd <talk-dir> && npm install && npx slidev build`. If it succeeds, `rm -rf dist/`. If it fails, read the error, fix, rebuild.
-6. Delete `_analysis.json` and `_analysis.md`.
+6. **Then verify in dev.** Run `npm run dev`, click through every slide, and check for Vite error overlays. Build success ≠ slides render correctly — Vite's dev import-analysis has different relative-path rules than the production bundler, so a slide that compiles cleanly under `npx slidev build` can show an error overlay (or, worse, silently drop the diagram) under `npm run dev`. The common offender is relative JSON imports from `<script setup>` — see "Recreating diagrams" for the `import.meta.glob` workaround.
+7. Delete `_analysis.json` and `_analysis.md`.
 
 ### Mapping slide kinds to Slidev layouts
 
@@ -192,14 +193,15 @@ When the analysis lists multiple shapes and connectors with positions, the slide
 #### Workflow per diagram slide
 
 1. Create `diagrams/<descriptive-name>.json` in the deck dir.
-2. In the slide section of `slides.md`, add a `<script setup>` block importing just that spec.
+2. In the slide section of `slides.md`, add a `<script setup>` block that loads the spec via `import.meta.glob` (see "Why `import.meta.glob`" below).
 
-> **`<script setup>` is per-slide.** Slidev compiles each slide as its own Vue component, so `<script setup>` blocks are scoped to the slide they appear in. Variables imported on slide 7 are *not* visible on slide 8 — every diagram slide needs its own `import` block (even when importing the same spec twice). A `slides.md` with N diagram slides has N `<script setup>` blocks, each importing what *that* slide uses. This is fine and expected; don't try to hoist them.
+> **`<script setup>` is per-slide.** Slidev compiles each slide as its own Vue component, so `<script setup>` blocks are scoped to the slide they appear in. Variables imported on slide 7 are *not* visible on slide 8 — every diagram slide needs its own `<script setup>` block (even when loading the same spec twice). A `slides.md` with N diagram slides has N `<script setup>` blocks, each loading what *that* slide uses. This is fine and expected; don't try to hoist them.
 3. Render with `<Diagram :spec="..." />`, optionally passing `class="..."` so the slide's scoped CSS can theme it via `:deep()`.
 
 ```md
 <script setup>
-import spec from './diagrams/my-diagram.json'
+const _specs = import.meta.glob('./diagrams/*.json', { eager: true, import: 'default' })
+const spec = _specs['./diagrams/my-diagram.json']
 </script>
 
 # Slide title
@@ -207,9 +209,14 @@ import spec from './diagrams/my-diagram.json'
 <Diagram class="my-theme" :spec="spec" />
 
 <style scoped>
+.my-theme :deep(.box rect) { fill: none; stroke: none; }            /* zero out default box borders */
 .my-theme :deep(.box-emphasis rect) { fill: rgba(255, 153, 0, 0.18); }
 </style>
 ```
+
+> **Why `import.meta.glob` instead of a plain `import`?** Vite's dev-mode import-analysis can't resolve relative paths from Slidev's virtual `slides.md__slidev_N.md` files, so `import spec from './diagrams/foo.json'` works in `npx slidev build` but silently breaks in `npm run dev` — Vite throws a "Failed to resolve import" error and the slide renders without the diagram. `import.meta.glob` is processed by Vite specially and resolves correctly in both modes. The pattern is a one-line cost; use it for every diagram slide. (The trailing `[N]` indexing into `_specs` is paste-friendly: change the filename in one place when you rename a spec.)
+
+> **Zero out default box borders.** Every `<Diagram>` `<g class="box">` renders its `<rect>` with the default `stroke: currentColor`, so any `style:` you add to a spec ships with a visible border by default. The `.box rect { fill: none; stroke: none; }` rule above is a safe starting point — then opt boxes back in via per-style `box-<style>` rules (`.box-neuron rect { fill: #333399; }`, etc.). Skipping this is how you end up with mysterious empty rectangles around your text labels.
 
 #### Full spec reference
 
@@ -291,9 +298,12 @@ Beyond the geometry/text dump and diff blocks, `_analysis.md` emits a few semant
 - `🪄 Freeform/dense figure (N shapes, M with no text)` (slide annotation, near the top) — the slide is a hand-drawn drawing, freeform diagram, or decorative mesh (X/O on a board, network spaghetti). Trying to recreate this in `<Diagram>` is wasted effort — use `layout: image` with the source thumbnail. The accompanying suggestion in the annotation gives you the exact `<img>` path. Triggers when there are ≥ 12 positioned shapes, ≥ 55% have no text, AND there are ≥ 12 empty shapes in absolute terms (gates out perceptron-style schematics that hit the ratio early in their build). A second-stage check disables the flag when the empty shapes look like the unlabeled member of a labeled-grid pair (≥ 80% share an X coordinate, or each has a non-empty sibling within `2 × shape_width` horizontally) — those are tractable in `<Diagram>` as two-column layouts.
 - `⛔ scene change` (diff-block header swap) — replaces the usual "treat the whole block as one click" hint. Fires on either of: (a) ≥ 70% of a 5+ shape prior is wiped + at least one new shape added, or (b) 100% of the prior's shapes are removed regardless of count (catches title → body transitions that path (a)'s 5-shape gate misses). **Do not** wrap the affected slides as `v-click` reveals; author them as separate Slidev slides.
 - `⛔ text-swap scene change` (diff-block header swap) — every shape stayed put but the *only* change is a text replacement on a single shape, and the new text shares no word tokens with the old (Jaccard ≤ 0.15). The "stable banner with rotating content" pattern, where the source author rotated unrelated content through one persistent text frame. Treat as a fresh slide, not a click-driven swap.
+- `🪧 Sticker candidate (N free-floating pictures)` (slide annotation, under the `**Pictures:**` block) — the slide has 3+ free-floating images and no grid/swap signal. The block prints (a) a `dragPos:` YAML snippet to paste into the slide's frontmatter and (b) one `<Sticker id="pic-K" src="./imageN.png" />` line per picture to paste into the body. Initial positions are computed from PPTX coordinates (Slidev's default 980-wide 16:9 canvas). After pasting, `npm run dev` and **double-click any sticker** to drag / resize / rotate in place — the editor writes new positions back to the `dragPos:` block. See "Free-floating images / `<Sticker>`" below. **Skip the Sticker block** if the picture set is actually a grid (use `gallery`), a single dominant figure (`media` / `image`), or an annotation overlay on one base image (`<AnnotatedImage>`).
 - `decorative slivers (cropped views of the same image, likely a parallax/stripe overlay; not load-bearing)` — surfaced both in the per-slide `**Pictures:**` block and inside `added pictures` / `removed pictures` diff entries. Means the source author tiled many thin cropped strips of a single image as background decor. Skip them entirely — render the un-cropped image as the slide background (e.g. via `layout: image-bg`) and ignore the slivers. The diff block's count in the `(N)` header stays accurate (semantic content unchanged); only the per-entry rendering collapses.
 
 **Multi-paragraph shape text.** When a shape has more than one paragraph, the per-slide listing emits a fenced block under the geometry line (not the inline `text='...'` form). Diff blocks still join with ` | ` because they need to be compact. Either way: one paragraph = one `<p>` (or one `lines[]` entry) when you author the slide.
+
+**When the paragraphs in shape A visually align with separate items in shape B, split A into separate boxes.** PPTX authors will sometimes put 6 lines of text (e.g. "Sociology / Psychology / Biology / Biochemistry / Classical physics / Quantum mechanics") in a single tall text shape, with line spacing chosen so each line sits at the same y as one of 6 separately-positioned items elsewhere on the slide (e.g. a "metaphysical reduction ladder" with 6 scale-label boxes). The PPTX listing shows shape A as one box; the diff makes it look like a single element. **Don't model it as one `<Diagram>` box with a `lines: [...]` array** — that stacks all 6 lines tightly at the top and breaks the horizontal alignment with shape B. Instead, split A into 6 separate boxes at the matching y-coords (copy the y/h from B's rows, offset only the x), so each line stays aligned with its counterpart. The thumbnail makes this pattern obvious; the geometry dump alone doesn't.
 
 **Run-format tags.** Inside the per-paragraph breakdown, runs are tagged like `` [default] `` / `` [b+#FF0000] `` / `` [is] `` / `` [u] `` where letters mean: `b` bold, `i` italic, `s` strikethrough, `u` underline. They collapse into one token (`[bs]` = bold + strike) and a `+#RRGGBB` color suffix follows when present. Strike and underline pass through to your slide via GFM (`~~text~~` for strike) or inline CSS — no special component needed.
 
@@ -307,6 +317,8 @@ Beyond `<Diagram>`, the `theme-josh` theme ships a handful of inline components 
   ```md
   <p><Quiet>Environmental</Quiet> <Hi>science</Hi> <Quiet>examines…</Quiet></p>
   ```
+
+  **Markdown emphasis still applies inside.** The markdown parser runs before Vue, so `_` and `*` inside `<Hi>` / `<Quiet>` are still interpreted as emphasis markers. Multi-underscore PPTX-style fill-in-the-blank placeholders are the common failure: `<Hi>____________</Hi>` parses as a chain of `<em>` open/close tags and Vue then dies with "Element is missing end tag." Escape with `\_` (or `\*`), or replace the placeholder with non-conflicting characters (`—`, `…`, `▮▮▮▮`).
 
 - `<DataTable :headers :rows :highlight-row :highlight-col :header-rotate />` — styled table for truth tables and small data grids. The analysis's `**Tables:**` block emits rows as JSON arrays, paste-ready. `header-rotate: 'vertical-up' | 'vertical-down'` rotates the header text 90° — match PPTX `vert=270` / `vert=90` on a co-occurrence matrix's column headers.
 
@@ -323,6 +335,8 @@ Beyond `<Diagram>`, the `theme-josh` theme ships a handful of inline components 
   See the "Cropped pictures" section below for the manual recipe — `<Cropped>` is the wrapper-shorthand for the same math.
 
 - `<AnnotatedImage>` + `<Box>` / `<Label>` / `<Layer>` — overlay primitives for image-substrate slides. See "Annotated images" below.
+
+- `<Sticker id src :frame :rotate :w :h alt />` — drag-positioned floating image. Pair with a `dragPos:` block in slide frontmatter (the prep script emits a ready-to-paste one when it sees the `🪧 Sticker candidate` pattern). `npm run dev` → double-click to drag/resize/rotate; positions write back to `dragPos[id]`. `frame: 'polaroid' | 'shadow'` for decorative chrome. `:w`/`:h` are an escape-hatch size cap for when `dragPos:` is missing or you specifically want to lock the size (they block drag-resize). See "Free-floating images / `<Sticker>`" below.
 
 #### Layout prop reference
 
@@ -399,6 +413,29 @@ Skip the Mermaid suggestion (and use `<Diagram>`) when the spatial arrangement i
 
 See `.agents/skills/slidev/references/diagram-mermaid.md` (installed via `npx skills add slidevjs/slidev`) for Mermaid-in-Slidev specifics.
 
+### Gotcha: named slots + default-slot content on `media` / `aside` / `gallery`
+
+Layouts that mix a default `<slot />` with named `<slot name="X" />` slots — `media`, `aside`, `gallery`, `two-cols-header`, `outro`, etc. — follow one markdown rule: content *outside* any `::name::` directive goes into the default slot. **Don't** also write an explicit `::default::` block; Vue errors with "Extraneous children found when component already has explicitly named default slot."
+
+The pattern that works: put all default-slot content (including the `# Title`) *before* the named slot directives, no `::default::` keyword.
+
+```md
+---
+layout: media
+side: left
+---
+
+# Why Hermissenda?                              <!-- default slot -->
+
+Some prose about Hermissenda.                   <!-- default slot -->
+
+::media::
+
+<img src="./hermissenda.png" />                 <!-- media slot -->
+```
+
+If you find yourself writing `# Title` → `::media::` → content → `::default::` → more content, swap the order: put the default-slot content first and the named slot last.
+
 ### Gotcha: blank lines + indentation inside raw HTML/SVG blocks
 
 If you find yourself hand-writing a raw `<svg>` block in slides.md (rather than using `<Diagram :spec="…" />`), watch out for this: Slidev's markdown parser treats a blank line inside an HTML block as a paragraph break and re-enters markdown mode for what follows. If the next line is indented **4+ spaces** (the natural indent for nested SVG children), markdown wraps it in `<pre><code>`, and Vue then fails the build with "Element is missing end tag" or "`<pre>` cannot be child of `<svg>`".
@@ -471,6 +508,43 @@ When a picture is cropped, the analysis flags it with `✂ crop l=…% t=…% r=
 The math: width = `100 / (100 - l - r)` × 100%, height = `100 / (100 - t - b)` × 100%, left = `-l / (100 - l - r)` × 100%, top = `-t / (100 - t - b)` × 100%. The script prints these directly so you don't have to compute them — just paste.
 
 For the common case of "use the cropped image inside the `media` layout's `::media::` slot", wrap the `<img>` in the cropping div and place that div in the slot. The layout's media container becomes the bbox; the wrapper clips to it.
+
+#### Free-floating images / `<Sticker>`
+
+Some source slides have many small images placed at specific, irregular positions — illustrations scattered around a central diagram, polaroid-style reference photos, a "wall" of cover art. None of the standard layouts fit: `gallery` forces a grid, `media` assumes one dominant image, `image-bg` is a single background.
+
+The pattern is `<Sticker id src />` paired with a `dragPos:` block in slide frontmatter. Slidev's `<v-drag>` powers the drag-edit: double-click any sticker in `npm run dev` and you get drag/resize/rotate handles. Releasing the handle writes the new pos back to `dragPos[id]` in the markdown source.
+
+```yaml
+---
+dragPos:
+  pic-0: "814,58,117,143"
+  pic-1: "757,115,143,172"
+  pic-2: "84,64,130,130"
+  # ...
+---
+
+# A scattering of icons
+
+<Sticker id="pic-0" src="./image15.png" />
+<Sticker id="pic-1" src="./image2.png" />
+<Sticker id="pic-2" src="./image9.png" />
+```
+
+The `pos` string is `"x,y,w,h"` or `"x,y,w,h,rotation"` in **Slidev canvas coords** (default 980 × 551, 16:9). The prep script does this conversion for you — every picture line in `**Pictures:**` ends with `→ slidev pos \`x,y,w,h\``, and when a slide has 3+ free-floating pictures the script also emits a ready-to-paste `dragPos:` YAML block and matching `<Sticker>` lines under a `🪧 Sticker candidate` annotation. Just copy both blocks into the slide and run the dev server to nudge.
+
+**Props:**
+
+- `id` (required) — must be unique across the slide. Keys in `dragPos:` are scoped to the slide.
+- `src` (required) — relative image path.
+- `alt` — alt text. Defaults to empty.
+- `rotate` — fixed decorative tilt in deg. Composes with the editor's rotation handle (which writes a 5th value to the `pos` string). Use this when you want a "stuck on the corkboard" look that the user shouldn't accidentally undo by dragging.
+- `frame` — `'none'` (default), `'polaroid'` (white border + drop shadow), or `'shadow'` (drop shadow only).
+- `w` / `h` — optional hard size cap in slide-canvas px. Applied as inline CSS on the inner sticker box. Use when there's no `dragPos:` entry for this id (so v-drag would otherwise let the image render at its natural pixel size). **Setting `:w` / `:h` also blocks the drag editor's resize handle** — the inline style overrides whatever `<v-drag>` would apply, so the sticker freezes visually at the prop size even though dragPos is updating. Omit these props on stickers you want to fine-tune via dblclick-drag; the `dragPos:` `w,h` values handle sizing in the normal flow.
+
+**When NOT to use Sticker.** If the pictures form a clean grid, use `gallery`. If one picture is dominant and the rest are decorative, use `media` or `image`. If multiple pictures are layered and reveal regions on click, use `<AnnotatedImage>`. `<Sticker>` is for the *no-clean-layout* case where positions are part of the slide's meaning (illustrations next to a diagram, a board of polaroids, etc.).
+
+**Build vs dev.** Drag-editing only works in `npm run dev`. In `npm run build` (static SPA), stickers render exactly where the `dragPos:` block says. So: position in dev, ship from build. If `dragPos[id]` is missing for a sticker, the sticker mounts at its natural document-flow position and the editor captures whatever it lands at on the first drag — usually you want positions seeded by the prep script's `dragPos:` block.
 
 ### Videos
 

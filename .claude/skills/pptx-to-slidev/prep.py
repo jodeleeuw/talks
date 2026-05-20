@@ -1929,6 +1929,8 @@ def _slide_toc_annotations(slide):
         tags.append("⚠")
     if slide.get("mermaid_hint"):
         tags.append(f"💡{slide['mermaid_hint']}")
+    if slide.get("sticker_candidate"):
+        tags.append(f"🪧×{slide['sticker_candidate']}")
     return tags
 
 
@@ -2088,7 +2090,21 @@ def write_summary(path, analysis):
             s["sliver_groups"] = (
                 {f: len(g) for f, g in sliver_groups.items()} or None
             )
-            for pic in pics:
+            # Slidev canvas math for the per-picture `slidev pos` hint and the
+            # `dragPos:` block below. Defaults to a 980-wide 16:9 canvas — same
+            # defaults the `<Sticker>` component (and Slidev's `<v-drag>`) use.
+            slidev_w = 980
+            slidev_h = round(slidev_w * 9 / 16)
+            deck_w = sz["w"] or 960
+            deck_h = sz["h"] or 540
+            def _slidev_pos(bb):
+                x = round((bb.get("x") or 0) * slidev_w / deck_w)
+                y = round((bb.get("y") or 0) * slidev_h / deck_h)
+                w = round((bb.get("w") or 0) * slidev_w / deck_w)
+                h = round((bb.get("h") or 0) * slidev_h / deck_h)
+                return f"{x},{y},{w},{h}"
+            placed = []  # (sticker_id, pos_str, file) for pics worth dragging
+            for i, pic in enumerate(pics):
                 if id(pic) in sliver_ids:
                     continue
                 bb = pic.get("bbox") or {}
@@ -2096,9 +2112,11 @@ def write_summary(path, analysis):
                     "  ⚠ **video placeholder** — skip this picture and embed the matching video below instead"
                     if pic.get("video_placeholder") else ""
                 )
+                pos_str = _slidev_pos(bb)
                 L.append(
                     f"- `{pic.get('file', '?')}` at ({bb.get('x')}, {bb.get('y')}) "
-                    f"size {bb.get('w')}×{bb.get('h')}{placeholder_tag}"
+                    f"size {bb.get('w')}×{bb.get('h')} → slidev pos `{pos_str}`"
+                    f"{placeholder_tag}"
                 )
                 crop = pic.get("crop")
                 if crop:
@@ -2112,6 +2130,35 @@ def write_summary(path, analysis):
                         f"`img {{ width: {crop['img_width_pct']}%; height: {crop['img_height_pct']}%; "
                         f"left: {crop['img_left_pct']}%; top: {crop['img_top_pct']}%; }}`"
                     )
+                if not pic.get("video_placeholder") and not crop:
+                    placed.append((f"pic-{i}", pos_str, pic.get("file") or "?"))
+            # If a slide has 3+ free-floating pictures at irregular positions
+            # (not a 2-col, not a gallery grid), it's a `<Sticker>` candidate.
+            # Emit a ready-to-paste `dragPos:` block + Sticker tags so the
+            # author can drop them in and refine with the Slidev drag editor.
+            if len(placed) >= 3 and not s.get("image_swap") and not s.get("highlight_reveal"):
+                s["sticker_candidate"] = len(placed)
+                L.append("")
+                L.append(
+                    f"🪧 **Sticker candidate** ({len(placed)} free-floating "
+                    f"pictures) — if these aren't a clean grid (gallery) or a "
+                    f"single dominant figure (media/image), drop the block below "
+                    f"into slide frontmatter and the tags into the body. Then "
+                    f"`npm run dev` and **double-click any sticker** to drag / "
+                    f"resize / rotate in place — the editor writes positions back "
+                    f"to the `dragPos:` block."
+                )
+                L.append("")
+                L.append("```yaml")
+                L.append("dragPos:")
+                for sid, pos_str, _f in placed:
+                    L.append(f'  {sid}: "{pos_str}"')
+                L.append("```")
+                L.append("")
+                L.append("```html")
+                for sid, _pos, f in placed:
+                    L.append(f'<Sticker id="{sid}" src="./{f}" />')
+                L.append("```")
             for fname, slivers in sliver_groups.items():
                 L.append(
                     f"- `{fname}` — {len(slivers)} decorative slivers "
