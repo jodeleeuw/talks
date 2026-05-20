@@ -5,20 +5,25 @@ withDefaults(defineProps<{
   highlightRow?: number
   highlightCol?: number
   mono?: boolean
+  // Rotate column header text. 'vertical-up' = -90° / reads bottom-to-top
+  // (matches PPTX `vert=270` rotation); 'vertical-down' = 90° / reads top-to-
+  // bottom. Headers stay aligned to their columns; the header row's height
+  // grows to fit the rotated text.
+  headerRotate?: 'vertical-up' | 'vertical-down'
 }>(), {
   mono: true,
 })
 </script>
 
 <template>
-  <table class="josh-data" :class="{ mono }">
+  <table class="josh-data" :class="[{ mono }, headerRotate ? `header-${headerRotate}` : null]">
     <thead>
       <tr>
         <th
           v-for="(h, ci) in headers"
           :key="ci"
           :class="{ 'col-highlight': highlightCol === ci }"
-        >{{ h }}</th>
+        ><span class="th-text">{{ h }}</span></th>
       </tr>
     </thead>
     <tbody>
@@ -61,6 +66,31 @@ withDefaults(defineProps<{
   font-size: 0.85rem;
   letter-spacing: 0.08em;
   font-weight: 500;
+}
+
+/* Rotated header text: the <th> gets a fixed height (enough for the rotated
+   string), tighter horizontal padding, and the inner <span> rotates around its
+   own center. */
+.josh-data.header-vertical-up th,
+.josh-data.header-vertical-down th {
+  padding: 0.4rem 0.5rem;
+  vertical-align: bottom;
+  height: 7rem;
+}
+
+.josh-data.header-vertical-up .th-text,
+.josh-data.header-vertical-down .th-text {
+  display: inline-block;
+  white-space: nowrap;
+  transform-origin: center center;
+}
+
+.josh-data.header-vertical-up .th-text {
+  transform: rotate(-90deg);
+}
+
+.josh-data.header-vertical-down .th-text {
+  transform: rotate(90deg);
 }
 
 .josh-data tbody tr.row-highlight td {

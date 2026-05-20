@@ -4,15 +4,20 @@ import FitContent from '../components/FitContent.vue'
 
 withDefaults(defineProps<{
   side?: 'left' | 'right'
+  // 'rail' (default): sidebar is a flush stripe with an accent left-border.
+  // 'card': sidebar wraps in a rounded-border container with a soft tint and
+  // breathing room around it — for PPTX-style rounded callout boxes.
+  asideStyle?: 'rail' | 'card'
 }>(), {
   side: 'right',
+  asideStyle: 'rail',
 })
 
 const slots = useSlots()
 </script>
 
 <template>
-  <div class="slidev-layout josh-aside" :class="`side-${side}`">
+  <div class="slidev-layout josh-aside" :class="[`side-${side}`, `aside-${asideStyle}`]">
     <div class="aside-main">
       <FitContent align="center" origin="left center">
         <div class="main-inner">
@@ -93,11 +98,25 @@ const slots = useSlots()
 .aside-sidebar {
   min-height: 0;
   min-width: 0;
+  align-self: center;
+  max-height: 100%;
+}
+
+/* Default 'rail' style — flush stripe with an accent border on the inner edge. */
+.josh-aside.aside-rail .aside-sidebar {
   background: color-mix(in oklab, var(--josh-fg) 6%, transparent);
   border-left: 3px solid var(--josh-accent);
   padding: 1.4rem 1.5rem;
-  align-self: center;
-  max-height: 100%;
+}
+
+/* 'card' style — rounded callout with a subtle border, matching PPTX
+   roundRect sidebars. No accent stripe; the border + tint do the work. */
+.josh-aside.aside-card .aside-sidebar {
+  background: color-mix(in oklab, var(--josh-fg) 5%, transparent);
+  border: 1px solid color-mix(in oklab, var(--josh-accent) 35%, var(--josh-rule));
+  border-radius: 10px;
+  padding: 1.6rem 1.7rem;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.22);
 }
 
 .sidebar-inner :deep(h2),

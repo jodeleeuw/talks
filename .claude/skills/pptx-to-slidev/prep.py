@@ -734,12 +734,30 @@ def extract_animations(root):
     most common preset class within the group (`entrance` / `exit` /
     `emphasis` / `motion`); when multiple kinds mix in one group, the
     secondary counts are returned in `extra` as `{kind: count}`.
+
+    `<p:bldLst><p:bldP build="p" spid="...">` markers — PPTX's per-paragraph
+    build mode — are stored as `paragraph_build: True` on single-shape clicks
+    that target a paragraph-built shape. Lets the emitter explain why a single
+    text block consumes 10+ clicks.
     """
     if root is None:
         return []
     timing = root.find("p:timing", NS)
     if timing is None:
         return []
+
+    # <p:bldLst><p:bldP build="p" spid="..."/> — paragraph build markers.
+    # Different authoring tools use `build` vs `bld` for the attribute, so
+    # check both. `build="p"` (or `bld="p"`) means each user click reveals one
+    # paragraph of the target text shape.
+    build_modes = {}
+    for bldP in timing.iter("{%s}bldP" % NS["p"]):
+        spid = bldP.attrib.get("spid")
+        if not spid:
+            continue
+        bld = bldP.attrib.get("build") or bldP.attrib.get("bld") or ""
+        if bld:
+            build_modes[spid] = bld
 
     groups = []
     current = None
@@ -788,6 +806,11 @@ def extract_animations(root):
         rec = {"kind": primary, "spids": spids_ordered}
         if extra:
             rec["extra_kinds"] = extra
+        # Single-shape clicks targeting a paragraph-built shape get a tag so
+        # the emitter can collapse the "N clicks all on shape #X" run into one
+        # readable line.
+        if len(spids_ordered) == 1 and build_modes.get(spids_ordered[0]) == "p":
+            rec["paragraph_build"] = True
         records.append(rec)
     return records
 
@@ -1087,6 +1110,76 @@ def _mermaidable(slide):
     return "LR" if hsum >= vsum else "TB"
 
 
+def _bboxes_overlap(a, b):
+    """True if two `{x, y, w, h}` bboxes overlap by any positive area."""
+    if not a or not b:
+        return False
+    if a.get("x") is None or b.get("x") is None:
+        return False
+    ax, ay = a["x"], a["y"]
+    aw, ah = a.get("w") or 0, a.get("h") or 0
+    bx, by = b["x"], b["y"]
+    bw, bh = b.get("w") or 0, b.get("h") or 0
+    return not (ax + aw <= bx or bx + bw <= ax or ay + ah <= by or by + bh <= ay)
+
+
+def _image_swap_collapse_signals(prev_slide, curr_slide):
+    """Reasons to collapse adjacent picture-swap slides into one Slidev slide.
+
+    Returns a list of human-readable signals — non-empty means "collapse",
+    empty means "recommend N separate slides". The three signals catch the
+    three legitimate uses of an image swap stack:
+
+      - shared title/heading: same plain text across both slides → "same
+        rhetorical beat, different illustration",
+      - overlapping picture bboxes: the pictures stack on top of each other
+        (one is the base, others reveal regions) → layered swap,
+      - constant overlay shapes: every non-picture shape on the slide stayed
+        put (callouts annotating a changing photo) → stable overlay.
+
+    All other cases — disconnected illustrative examples, headerless picture
+    grids — should stay as N separate slides.
+    """
+    signals = []
+
+    prev_plain = _slide_plain_text(prev_slide).strip()
+    curr_plain = _slide_plain_text(curr_slide).strip()
+    if prev_plain and prev_plain == curr_plain:
+        signals.append("shared heading/text across both slides")
+
+    prev_pics = prev_slide.get("pictures") or []
+    curr_pics = curr_slide.get("pictures") or []
+    for pp in prev_pics:
+        if pp.get("video_placeholder"):
+            continue
+        for cp in curr_pics:
+            if cp.get("video_placeholder"):
+                continue
+            if pp.get("file") == cp.get("file"):
+                continue
+            if _bboxes_overlap(pp.get("bbox"), cp.get("bbox")):
+                signals.append("picture bboxes overlap (layered swap, not alternatives)")
+                break
+        else:
+            continue
+        break
+
+    prev_shape_keys = {
+        _shape_pos_key(s)
+        for s in (prev_slide.get("shapes") or [])
+        if (s.get("bbox") or {}).get("x") is not None
+    }
+    curr_shape_keys = {
+        _shape_pos_key(s)
+        for s in (curr_slide.get("shapes") or [])
+        if (s.get("bbox") or {}).get("x") is not None
+    }
+    if prev_shape_keys and prev_shape_keys == curr_shape_keys:
+        signals.append("constant non-picture overlay shapes (callouts annotating the swap)")
+
+    return signals
+
+
 def _slide_picture_signature(slide):
     """Sorted tuple of image filenames on a slide — order-independent identity.
 
@@ -1141,6 +1234,65 @@ _FREEFORM_EMPTY_RATIO = 0.55
 _FREEFORM_MIN_EMPTY = 12
 
 
+def _is_labeled_grid(shapes):
+    """True if the slide's empty shapes form a column-aligned or labeled-grid
+    pattern — i.e. the figure is NOT freeform/hand-drawn despite the empty-shape
+    ratio gate firing.
+
+    Two signals:
+      1. ≥ 80% of empty shapes share an X coordinate (one column of, say,
+         labeled circles) — labels typically sit in a separate column.
+      2. ≥ 80% of empty shapes have a non-empty sibling within `2 × shape_width`
+         horizontally and roughly the same vertical band (label-beside pattern).
+
+    Catches the "two columns of 6 ellipses + 6 label rects" structure in talk
+    22 slides 5/6/7 — 12 empty shapes that the raw heuristic mistakes for
+    freeform clutter.
+    """
+    empty = []
+    non_empty = []
+    for s in shapes:
+        bb = s.get("bbox") or {}
+        if bb.get("x") is None:
+            continue
+        has_text = any(p.get("text", "").strip() for p in s.get("text", []) or [])
+        (non_empty if has_text else empty).append(s)
+    if not empty:
+        return False
+
+    # Column alignment: cluster X coords with a 12-px tolerance and check whether
+    # any single cluster captures ≥ 80% of the empty shapes.
+    xs = [s["bbox"]["x"] for s in empty]
+    tol = 12.0
+    for ref_x in xs:
+        same = sum(1 for x in xs if abs(x - ref_x) < tol)
+        if same / len(xs) >= 0.8:
+            return True
+
+    # Labeled-sibling pattern: each empty shape has a non-empty shape within
+    # 2× its own width horizontally, with overlapping vertical extents.
+    if not non_empty:
+        return False
+    labeled = 0
+    for e in empty:
+        ebb = e["bbox"]
+        ew = ebb.get("w") or 0
+        ecx = ebb["x"] + ew / 2
+        ecy = ebb["y"] + (ebb.get("h") or 0) / 2
+        reach = max(ew, 1) * 2
+        for ne in non_empty:
+            nbb = ne["bbox"]
+            if nbb.get("x") is None:
+                continue
+            ncx = nbb["x"] + (nbb.get("w") or 0) / 2
+            n_top = nbb["y"]
+            n_bot = nbb["y"] + (nbb.get("h") or 0)
+            if abs(ncx - ecx) <= reach and (n_top - 8) <= ecy <= (n_bot + 8):
+                labeled += 1
+                break
+    return labeled / len(empty) >= 0.8
+
+
 def _freeform_figure_stats(slide):
     """Return (n_shapes, n_empty, is_freeform) for the freeform-figure heuristic.
 
@@ -1148,6 +1300,11 @@ def _freeform_figure_stats(slide):
     `bbox.x is not None`). Tables, pictures, and connectors are *not* shapes
     here — they live on their own slide-level lists. An "empty" shape is one
     where every paragraph's text is whitespace-only.
+
+    A second-stage check (`_is_labeled_grid`) gates the flag back off when the
+    "empty shapes" look like the unlabeled member of a labeled-grid pair —
+    avoids false-positives on perceptron-style schematics drawn as two columns
+    of circles with sibling label rects.
     """
     shapes = [
         s for s in (slide.get("shapes") or [])
@@ -1166,6 +1323,8 @@ def _freeform_figure_stats(slide):
         and ratio >= _FREEFORM_EMPTY_RATIO
         and n_empty >= _FREEFORM_MIN_EMPTY
     )
+    if is_freeform and _is_labeled_grid(shapes):
+        is_freeform = False
     return (n_shapes, n_empty, is_freeform)
 
 
@@ -1222,8 +1381,35 @@ def _sliver_groups(pictures):
 # wipes most of slide N's shapes and adds new ones, it's a fresh slide that
 # happens to come after — not a build-up. The skill's "one diff = one click"
 # rule doesn't apply; the author needs to see that explicitly.
+#
+# Two trigger paths: (1) ≥ 70% of a 5+ shape prior is wiped, OR (2) 100% of
+# the prior's shapes are wiped regardless of count — that's a scene change
+# even when going from 1 shape to N (e.g. a bare title slide → content slide).
 _SCENE_CHANGE_MIN_PRIOR = 5
 _SCENE_CHANGE_REMOVED_RATIO = 0.7
+
+# Threshold for the "text-swap scene change" annotation. A single shape stays
+# put across slides but its text is replaced with unrelated content (Jaccard
+# token similarity at-or-below this value). Detects the "stable banner with
+# swapping bullet content" pattern that looks like a no-op build-up but is
+# actually N separate slides.
+_TEXT_SWAP_MAX_JACCARD = 0.15
+
+
+def _jaccard_tokens(a, b):
+    """Word-token Jaccard similarity in [0, 1]. Used to decide whether two
+    shape-text strings are "unrelated enough" to call a scene change.
+
+    Two empty strings count as identical (1.0); one empty and one non-empty
+    counts as fully different (0.0).
+    """
+    toks_a = set(re.findall(r"\w+", (a or "").lower()))
+    toks_b = set(re.findall(r"\w+", (b or "").lower()))
+    if not toks_a and not toks_b:
+        return 1.0
+    if not toks_a or not toks_b:
+        return 0.0
+    return len(toks_a & toks_b) / len(toks_a | toks_b)
 
 
 def _shape_pos_key(sh):
@@ -1354,23 +1540,71 @@ def _emit_diff(L, prev_slide, curr_slide, *, limit=40):
     # Scene-change detection: if slide N+1 wipes most of slide N's shapes, the
     # "one diff = one click" build-up rule doesn't apply. Swap the header so
     # the author knows to treat this transition as a fresh slide.
+    #
+    # Two scene-change kinds are detected here:
+    #   - "shape scene change" — most of the prior shapes are gone and new ones
+    #     replace them (the standard case).
+    #   - "text-swap scene change" — every shape stayed put but the *only*
+    #     change is a text replacement on a single shape, with the new text
+    #     sharing no tokens with the old. The "stable banner with rotating
+    #     content" pattern from talk-22 slides 27–30.
     n_prior = len(prev_shapes)
     n_added = len(s_added)
     n_removed = len(s_removed)
-    removed_ratio = n_removed / max(n_prior, 1)
+    removed_ratio = n_removed / max(n_prior, 1) if n_prior else 0
     scene_change = (
-        n_prior >= _SCENE_CHANGE_MIN_PRIOR
-        and removed_ratio >= _SCENE_CHANGE_REMOVED_RATIO
-        and n_added >= 1
+        # All-or-nothing wipe regardless of prior count — catches title → body
+        # transitions that the 5-shape gate would miss.
+        (n_prior >= 1 and n_removed == n_prior and n_added >= 1)
+        # Mostly-wiped: the original 70%-of-5+ threshold.
+        or (
+            n_prior >= _SCENE_CHANGE_MIN_PRIOR
+            and removed_ratio >= _SCENE_CHANGE_REMOVED_RATIO
+            and n_added >= 1
+        )
     )
     curr_slide["scene_change"] = scene_change
+
+    text_swap_scene_change = False
+    text_swap_detail = None
+    if (
+        not scene_change
+        and not s_added and not s_removed
+        and not c_added and not c_removed
+        and not p_added and not p_removed
+        and len(s_modified) == 1
+    ):
+        prev_sh, curr_sh = s_modified[0]
+        prev_text = _shape_text(prev_sh)
+        curr_text = _shape_text(curr_sh)
+        fill_unchanged = prev_sh.get("fill") == curr_sh.get("fill")
+        if (
+            fill_unchanged
+            and prev_text != curr_text
+            and (prev_text.strip() or curr_text.strip())
+            and _jaccard_tokens(prev_text, curr_text) <= _TEXT_SWAP_MAX_JACCARD
+        ):
+            text_swap_scene_change = True
+            bb = (curr_sh.get("bbox") or {})
+            text_swap_detail = (
+                f"shape at ({bb.get('x')}, {bb.get('y')}) "
+                f"replaced its text with unrelated content"
+            )
+    curr_slide["text_swap_scene_change"] = text_swap_scene_change
 
     L.append("")
     if scene_change:
         L.append(
             f"**Diff from slide {prev_slide['index']}** "
-            f"⛔ **scene change** (≥70% of prior shapes removed — treat slide "
+            f"⛔ **scene change** (prior shapes removed wholesale — treat slide "
             f"{curr_slide['index']} as a fresh slide, NOT a build-up click):"
+        )
+    elif text_swap_scene_change:
+        L.append(
+            f"**Diff from slide {prev_slide['index']}** "
+            f"⛔ **text-swap scene change** ({text_swap_detail}; the new text "
+            f"shares no tokens with the old — treat slide "
+            f"{curr_slide['index']} as a fresh slide, NOT a click-driven swap):"
         )
     else:
         L.append(
@@ -1491,6 +1725,8 @@ def _finalize_animations(slide):
             # Re-filter extra_kinds counts to nothing-special; keep as-is since
             # they describe the *effects*, not the specific spids dropped above.
             rec["extra_kinds"] = grp["extra_kinds"]
+        if grp.get("paragraph_build"):
+            rec["paragraph_build"] = True
         final.append(rec)
 
     if final:
@@ -1498,8 +1734,34 @@ def _finalize_animations(slide):
     return final
 
 
-def _emit_animations(L, animations):
-    """Append a 🎬 PPTX animation annotation block to L. No-op if empty."""
+def _format_kind_tag(rec):
+    kind = rec.get("kind", "entrance")
+    extra_kinds = rec.get("extra_kinds") or {}
+    if extra_kinds:
+        extras = " + ".join(f"{v} {k}" for k, v in extra_kinds.items())
+        return f" ({kind} + {extras})"
+    if kind == "entrance":
+        return " (entrance)"
+    return f" ({kind})"
+
+
+def _format_spids(spids):
+    if len(spids) > 6:
+        shown = ", ".join(f"#{sp}" for sp in spids[:5])
+        return f"{shown} … and {len(spids) - 5} more"
+    if len(spids) == 1:
+        return f"shape #{spids[0]}"
+    return "shapes " + ", ".join(f"#{sp}" for sp in spids)
+
+
+def _emit_animations(L, animations, slide):
+    """Append a 🎬 PPTX animation annotation block to L. No-op if empty.
+
+    Consecutive single-spid clicks of the same kind collapse into one line.
+    When the run targets a paragraph-built shape (`<p:bldP build="p">`), the
+    line names the paragraph count from the shape's text so the author knows
+    which click reveals which paragraph.
+    """
     if not animations:
         return
     n = len(animations)
@@ -1509,60 +1771,206 @@ def _emit_animations(L, animations):
         f"this slide. Group elements by click when mapping to `v-click` / "
         f"`revealAt`:"
     )
-    for rec in animations:
-        spids = rec["spids"]
-        if len(spids) > 6:
-            shown = ", ".join(f"#{sp}" for sp in spids[:5])
-            extra = len(spids) - 5
-            spid_str = f"{shown} … and {extra} more"
-        elif len(spids) == 1:
-            spid_str = f"shape #{spids[0]}"
-        else:
-            spid_str = "shapes " + ", ".join(f"#{sp}" for sp in spids)
 
-        kind = rec.get("kind", "entrance")
-        extra_kinds = rec.get("extra_kinds") or {}
-        if extra_kinds:
-            extras = " + ".join(f"{v} {k}" for k, v in extra_kinds.items())
-            kind_tag = f" ({kind} + {extras})"
-        elif kind == "entrance":
-            kind_tag = " (entrance)"
-        else:
-            kind_tag = f" ({kind})"
+    # Paragraph counts per shape spid — used when a run is paragraph-built.
+    para_counts = {}
+    for sh in slide.get("shapes") or []:
+        sid = sh.get("id")
+        if sid is None:
+            continue
+        n_para = sum(
+            1 for p in (sh.get("text") or []) if p.get("text", "").strip()
+        )
+        para_counts[str(sid)] = n_para
+
+    i = 0
+    while i < len(animations):
+        rec = animations[i]
+        if len(rec["spids"]) == 1:
+            spid = rec["spids"][0]
+            kind = rec["kind"]
+            j = i + 1
+            while (
+                j < len(animations)
+                and len(animations[j]["spids"]) == 1
+                and animations[j]["spids"][0] == spid
+                and animations[j]["kind"] == kind
+                and not animations[j].get("extra_kinds")
+                and not rec.get("extra_kinds")
+            ):
+                j += 1
+            run = j - i
+            paragraph_build = any(
+                animations[k].get("paragraph_build") for k in range(i, j)
+            )
+            if run >= 3 or (paragraph_build and run >= 2):
+                first_click = rec["click"]
+                last_click = animations[j - 1]["click"]
+                pcount = para_counts.get(str(spid))
+                if paragraph_build:
+                    extra_note = ""
+                    if pcount is not None:
+                        # PPTX often emits one extra click per paragraph beyond
+                        # the visible count (sub-bullet wrappers); flag the
+                        # mismatch so the author isn't confused.
+                        mismatch = (
+                            f" — note: PPTX has {run} click groups for "
+                            f"{pcount} visible paragraph"
+                            f"{'s' if pcount != 1 else ''}, so some clicks "
+                            f"may reveal bullet-level sub-builds"
+                            if pcount and run != pcount
+                            else ""
+                        )
+                        extra_note = (
+                            f"; shape #{spid} has `<p:bldP build=\"p\">` "
+                            f"(paragraph-by-paragraph reveal)"
+                            f"{mismatch}"
+                        )
+                    L.append(
+                        f"- clicks {first_click}–{last_click}: shape #{spid} "
+                        f"({kind} × {run}{extra_note})"
+                    )
+                else:
+                    L.append(
+                        f"- clicks {first_click}–{last_click}: shape #{spid} "
+                        f"({kind} × {run} consecutive — likely a paragraph or "
+                        f"bullet build on a single text shape)"
+                    )
+                i = j
+                continue
+        spid_str = _format_spids(rec["spids"])
+        kind_tag = _format_kind_tag(rec)
         L.append(f"- click {rec['click']}: {spid_str}{kind_tag}")
+        i += 1
+
+
+def _build_shape_lines(slide):
+    """Return the markdown lines for a slide's `**Shapes (px in deck coords):**`
+    section. Splitting this out lets `write_summary` compare a slide's shape
+    list to the prior slide's and elide identical bodies (long decks repeat
+    huge shape lists slide-to-slide).
+    """
+    out = []
+    for sh in slide.get("shapes", []):
+        bb = sh.get("bbox") or {}
+        if bb.get("x") is None:
+            continue
+        paragraphs = [p["text"] for p in sh.get("text", [])]
+        sid = sh.get("id")
+        id_tag = f"#{sid} " if sid else ""
+        fill_tag = f" fill={sh['fill']}" if sh.get("fill") else ""
+        vert = sh.get("vert")
+        vert_tag = f"  vert={vert}" if vert is not None else ""
+        overlay_tag = (
+            "  🎨 full-slide overlay (likely a darken scrim over a background picture)"
+            if sh.get("overlay") else ""
+        )
+        head = (
+            f"- {id_tag}`{sh.get('prst', '?')}` at ({bb.get('x')}, {bb.get('y')}) "
+            f"size {bb.get('w')}×{bb.get('h')}{fill_tag}{vert_tag}{overlay_tag}"
+        )
+        # Single-paragraph (or empty) shapes keep the inline `text=` form so the
+        # analysis stays scannable. Multi-paragraph shapes need each paragraph
+        # on its own line — a fenced block is the only way to preserve line
+        # breaks inside a markdown list item.
+        if len(paragraphs) <= 1:
+            txt = paragraphs[0] if paragraphs else ""
+            out.append(f"{head}  text={txt!r}")
+        else:
+            out.append(head)
+            out.append("  ```")
+            for p in paragraphs:
+                out.append(f"  {p}")
+            out.append("  ```")
+    return out
+
+
+def _slide_one_liner(slide, limit=70):
+    """Short TOC-friendly title for a slide. Uses the first non-empty paragraph
+    of any shape, truncated. Falls back to '(blank)' for divider slides.
+    """
+    for sh in slide.get("shapes") or []:
+        for p in sh.get("text") or []:
+            t = (p.get("text") or "").strip()
+            if t:
+                # Collapse newlines and runs of whitespace.
+                t = re.sub(r"\s+", " ", t)
+                if len(t) > limit:
+                    t = t[:limit - 1].rstrip() + "…"
+                return t
+    if slide.get("pictures"):
+        n = len(slide["pictures"])
+        return f"({n} picture{'s' if n != 1 else ''})"
+    return "(blank)"
+
+
+def _slide_toc_annotations(slide):
+    """Return a list of icon tokens summarizing a slide's annotations.
+
+    Reads fields stashed on the slide dict during the write pass — anything
+    that's already shown inline in the slide section is surfaced here so the
+    reader can scan the TOC and find the high-signal slides without reading
+    the whole file.
+    """
+    tags = []
+    if slide.get("freeform_figure"):
+        tags.append("🪄")
+    if slide.get("animations"):
+        tags.append(f"🎬×{len(slide['animations'])}")
+    if slide.get("scene_change"):
+        tags.append("⛔")
+    if slide.get("text_swap_scene_change"):
+        tags.append("⛔text-swap")
+    if slide.get("image_swap") == "collapse":
+        tags.append("🔄")
+    if slide.get("image_swap") == "split":
+        tags.append("🔁")
+    if slide.get("highlight_reveal"):
+        tags.append("⚠")
+    if slide.get("mermaid_hint"):
+        tags.append(f"💡{slide['mermaid_hint']}")
+    return tags
 
 
 def write_summary(path, analysis):
-    L = []
-    L.append(f"# PPTX analysis: {analysis['pptx']}")
-    L.append("")
+    preamble = []
+    preamble.append(f"# PPTX analysis: {analysis['pptx']}")
+    preamble.append("")
     sz = analysis["deck_size"]
-    L.append(f"- Deck size: **{sz['w']} × {sz['h']} px** — use as SVG `viewBox` for diagram slides.")
+    preamble.append(f"- Deck size: **{sz['w']} × {sz['h']} px** — use as SVG `viewBox` for diagram slides.")
     imgs = analysis["extracted_images"]
-    L.append(f"- Extracted images (co-located with slides.md): {', '.join(f'`{n}`' for n in imgs) if imgs else '(none)'}")
-    L.append(f"- Slide count: {len(analysis['slides'])}")
-    L.append("")
-    L.append("> Look for **adjacent slides with overlapping text/shapes** — they are almost always build-up animations to collapse into one Slidev slide with `v-click` reveals.")
-    L.append(">")
-    L.append("> **Each `**Diff from slide N**` block below is ONE click in the build-up.** If a diff lists five new shapes, all five share the same `revealAt`. Don't fragment a single source-slide transition across multiple clicks — the author chose to reveal those elements together for a reason (a node and its label, a binary op's two inputs, a structure and its annotation). Number clicks by source-slide transition, not by element count.")
-    L.append(">")
-    L.append("> A common variant: adjacent slides with **identical plain text but different run formatting** (bold/color shifts). That's a highlight-reveal build, not a duplicate. The script flags these inline as `⚠ HIGHLIGHT-REVEAL …`. Collapse them into one slide whose runs toggle their `.active` class based on `$clicks`.")
-    L.append("")
+    preamble.append(f"- Extracted images (co-located with slides.md): {', '.join(f'`{n}`' for n in imgs) if imgs else '(none)'}")
+    preamble.append(f"- Slide count: {len(analysis['slides'])}")
+    preamble.append("")
+    preamble.append("> Look for **adjacent slides with overlapping text/shapes** — they are almost always build-up animations to collapse into one Slidev slide with `v-click` reveals.")
+    preamble.append(">")
+    preamble.append("> **Each `**Diff from slide N**` block below is ONE click in the build-up.** If a diff lists five new shapes, all five share the same `revealAt`. Don't fragment a single source-slide transition across multiple clicks — the author chose to reveal those elements together for a reason (a node and its label, a binary op's two inputs, a structure and its annotation). Number clicks by source-slide transition, not by element count.")
+    preamble.append(">")
+    preamble.append("> A common variant: adjacent slides with **identical plain text but different run formatting** (bold/color shifts). That's a highlight-reveal build, not a duplicate. The script flags these inline as `⚠ HIGHLIGHT-REVEAL …`. Collapse them into one slide whose runs toggle their `.active` class based on `$clicks`.")
+    preamble.append("")
 
     prev_plain = None
     prev_sig = None
     prev_pics = None
     prev_index = None
     prev_slide = None
+    prev_shape_lines = None
+    prev_shape_idx = None
     if analysis.get("thumbnails_dir"):
-        L.append(
+        preamble.append(
             f"> 🖼  **Source thumbnails available**: every slide entry has a "
             f"`**Source:**` line pointing at a PNG render from "
             f"`{analysis['thumbnails_dir']}/`. **Read the PNG** before writing "
             f"the slide — it's the cheapest way to see what the original "
             f"actually looks like."
         )
-        L.append("")
+        preamble.append("")
+
+    # All per-slide content accumulates in `slide_body`; `L` is an alias kept
+    # for the existing loop body (which calls helpers like `_emit_diff(L, …)`).
+    # Don't rename to `body` — the table-emit code uses `body` as a local var.
+    slide_body = []
+    L = slide_body
 
     for s in analysis["slides"]:
         L.append(f"## Slide {s['index']}")
@@ -1586,16 +1994,58 @@ def write_summary(path, analysis):
         sig = _slide_format_signature(s)
         pics = _slide_picture_signature(s)
         if plain and plain == prev_plain:
-            if pics != prev_pics:
-                L.append("")
-                L.append(f"> 🔄 IMAGE-SWAP-REVEAL: same heading as slide {prev_index}, but the pictures differ. Likely a build-up where adjacent slides swap images while keeping the title — collapse into one Slidev slide with v-click image reveals.")
+            if pics != prev_pics and prev_slide is not None:
+                signals = _image_swap_collapse_signals(prev_slide, s)
+                if signals:
+                    s["image_swap"] = "collapse"
+                    L.append("")
+                    L.append(
+                        f"> 🔄 IMAGE-SWAP-REVEAL: same heading as slide "
+                        f"{prev_index}, pictures differ ({'; '.join(signals)}). "
+                        f"Collapse into one Slidev slide with v-click image "
+                        f"reveals."
+                    )
+                else:
+                    s["image_swap"] = "split"
+                    L.append("")
+                    L.append(
+                        f"> 🔁 ADJACENT-PICTURE-SLIDES: same heading as slide "
+                        f"{prev_index}, pictures differ — but no overlapping "
+                        f"picture bboxes and no constant overlay shapes. Likely "
+                        f"disconnected examples that happen to share a heading. "
+                        f"**Recommend N separate `layout: image` slides with "
+                        f"captions**, NOT a click-collapsed swap stack."
+                    )
             elif sig != prev_sig:
+                s["highlight_reveal"] = True
                 L.append("")
                 L.append(f"> ⚠ HIGHLIGHT-REVEAL: same plain text as slide {prev_index}, but per-run formatting differs. Collapse with slide {prev_index} into one Slidev slide where each segment toggles highlight on click.")
+        elif (not plain) and (not prev_plain) and pics != prev_pics and prev_pics and prev_slide is not None:
+            # Both slides headerless, pictures swap. No shared text to anchor
+            # the rhetoric, so only collapse when there's a layered/overlay
+            # signal; otherwise these are disconnected illustrative slides.
+            signals = _image_swap_collapse_signals(prev_slide, s)
+            if signals:
+                s["image_swap"] = "collapse"
+                L.append("")
+                L.append(
+                    f"> 🔄 IMAGE-SWAP-REVEAL: headerless picture slides "
+                    f"({'; '.join(signals)}). Collapse into one Slidev slide."
+                )
+            else:
+                s["image_swap"] = "split"
+                L.append("")
+                L.append(
+                    f"> 🔁 ADJACENT-PICTURE-SLIDES: slide {prev_index} → "
+                    f"{s['index']} both headerless, pictures swap, no constant "
+                    f"overlay shapes. **Recommend N separate `layout: image` "
+                    f"slides with captions** over a click-collapsed swap stack."
+                )
         prev_plain, prev_sig, prev_pics, prev_index = plain, sig, pics, s["index"]
 
         mhint = _mermaidable(s)
         if mhint:
+            s["mermaid_hint"] = mhint
             L.append("")
             L.append(f"> 💡 Mermaid candidate ({mhint}): all shapes are basic and all connectors snap to them — consider a `mermaid` block instead of hand-rolled SVG. Skip if the diagram's spatial layout is itself meaningful.")
 
@@ -1603,7 +2053,7 @@ def write_summary(path, analysis):
         prev_slide = s
 
         animations = _finalize_animations(s)
-        _emit_animations(L, animations)
+        _emit_animations(L, animations, s)
 
         # Text paragraphs across all shapes
         text_paras = []
@@ -1718,42 +2168,28 @@ def write_summary(path, analysis):
                 "Position the embed where the placeholder picture was."
             )
 
-        shape_lines = []
-        for sh in s.get("shapes", []):
-            bb = sh.get("bbox") or {}
-            if bb.get("x") is None:
-                continue
-            paragraphs = [p["text"] for p in sh.get("text", [])]
-            sid = sh.get("id")
-            id_tag = f"#{sid} " if sid else ""
-            fill_tag = f" fill={sh['fill']}" if sh.get("fill") else ""
-            vert = sh.get("vert")
-            vert_tag = f"  vert={vert}" if vert is not None else ""
-            overlay_tag = (
-                "  🎨 full-slide overlay (likely a darken scrim over a background picture)"
-                if sh.get("overlay") else ""
-            )
-            head = (
-                f"- {id_tag}`{sh.get('prst', '?')}` at ({bb.get('x')}, {bb.get('y')}) "
-                f"size {bb.get('w')}×{bb.get('h')}{fill_tag}{vert_tag}{overlay_tag}"
-            )
-            # Single-paragraph (or empty) shapes keep the inline `text=` form
-            # so the analysis stays scannable. Multi-paragraph shapes need each
-            # paragraph on its own line — a fenced block is the only way to
-            # preserve line breaks inside a markdown list item.
-            if len(paragraphs) <= 1:
-                txt = paragraphs[0] if paragraphs else ""
-                shape_lines.append(f"{head}  text={txt!r}")
-            else:
-                shape_lines.append(head)
-                shape_lines.append("  ```")
-                for p in paragraphs:
-                    shape_lines.append(f"  {p}")
-                shape_lines.append("  ```")
+        shape_lines = _build_shape_lines(s)
         if shape_lines:
             L.append("")
-            L.append("**Shapes (px in deck coords):**")
-            L.extend(shape_lines)
+            if (
+                prev_shape_lines is not None
+                and shape_lines == prev_shape_lines
+                and prev_shape_idx is not None
+            ):
+                # Long decks repeat huge shape lists slide-to-slide; elide when
+                # the geometry+text is identical to the previous slide and let
+                # the diff block above carry the per-transition signal.
+                L.append(
+                    f"**Shapes (px in deck coords):** "
+                    f"_(identical to slide {prev_shape_idx} — see above; the "
+                    f"diff block above lists what changed at the run/format "
+                    f"level)_"
+                )
+            else:
+                L.append("**Shapes (px in deck coords):**")
+                L.extend(shape_lines)
+            prev_shape_lines = shape_lines
+            prev_shape_idx = s["index"]
 
         cxns = s.get("connectors") or []
         if cxns:
@@ -1805,8 +2241,20 @@ def write_summary(path, analysis):
 
         L.append("")
 
+    # TOC: built last so it can read every annotation that the body emit pass
+    # stashed on slide dicts (freeform, animations, scene_change, image_swap,
+    # highlight_reveal, mermaid_hint).
+    toc = ["## Contents", ""]
+    for s in analysis["slides"]:
+        title = _slide_one_liner(s)
+        ann_tokens = _slide_toc_annotations(s)
+        ann_str = f" — {' '.join(ann_tokens)}" if ann_tokens else ""
+        toc.append(f"- **Slide {s['index']}**: {title}{ann_str}")
+    toc.append("")
+
+    final = preamble + toc + slide_body
     with open(path, "w") as f:
-        f.write("\n".join(L))
+        f.write("\n".join(final))
 
 
 def _adjust_template_paths(dest_dir, repo):

@@ -10,6 +10,14 @@ const props = defineProps({
   // height: <X>rem wrapper is providing the bounds and the default 16:9 would
   // overflow underneath a slide title or footer.
   fit: { type: String, default: 'aspect' },
+  // Treat the first `startAt` clicks of the spec as having already happened.
+  // The diagram opens in its click-`startAt` state; subsequent `revealAt: N`
+  // values still advance on user clicks (their effective click index becomes
+  // `N - startAt`). Lets one spec be reused across multiple slides — the
+  // follow-up slide opens with the build-up "frozen" mid-sequence without a
+  // duplicate spec. Setting `startAt >= max(revealAt)` freezes at the end
+  // state. The slide's click count is `max(revealAt) - startAt`.
+  startAt: { type: Number, default: 0 },
 })
 
 const viewBox = computed(() => {
@@ -59,6 +67,107 @@ function normalize(arr, rawLookup) {
   return items.map(resolve)
 }
 
+// --- startAt shifting --------------------------------------------------------
+//
+// When `startAt > 0`, every reveal/hide/textByClick directive on every item is
+// rewritten as if the first `startAt` clicks already happened. Geometry (and
+// the parent/raw lookup it feeds) is left untouched — only click bindings
+// shift. An item whose revealing window has fully closed is dropped entirely.
+//
+// `reveal: { from, to | until }` with `from - startAt <= 0` collapses to
+// `hideAt`-mode (visible at start, hidden after the upper bound) because the
+// existing `clickDirective` requires a `from` when reading `to`/`until`.
+//
+// `textByClick` keys also shift; the most-recent past entry becomes the new
+// click-0 state (either as an explicit `"0"` key when future entries remain,
+// or by overwriting the static `text`/`lines` when no future entries do).
+
+function shiftItem(item) {
+  if (!props.startAt) return item
+  const offset = props.startAt
+  // Deep clone via JSON round-trip — spec values are JSON-only (numbers,
+  // strings, arrays, plain objects) so this is safe and cheap.
+  const out = JSON.parse(JSON.stringify(item))
+
+  if (out.hideAt != null) {
+    const s = out.hideAt - offset
+    if (s <= 0) return null   // already past the hide point
+    out.hideAt = s
+  }
+
+  if (out.revealAt != null) {
+    const s = out.revealAt - offset
+    if (s <= 0) delete out.revealAt   // already visible
+    else out.revealAt = s
+  }
+
+  if (out.reveal && typeof out.reveal === 'object') {
+    const r = out.reveal
+    const fromS = r.from != null ? r.from - offset : null
+    const toS = r.to != null ? r.to - offset : null
+    const untilS = r.until != null ? r.until - offset : null
+    if (toS != null && toS < 0) return null
+    if (untilS != null && untilS <= 0) return null
+    if (fromS == null || fromS <= 0) {
+      // No active lower bound — collapse to hideAt form (or always-visible).
+      delete out.reveal
+      if (toS != null) out.hideAt = toS + 1
+      else if (untilS != null) out.hideAt = untilS
+    } else {
+      const next = { from: fromS }
+      if (toS != null) next.to = toS
+      if (untilS != null) next.until = untilS
+      out.reveal = next
+    }
+  }
+
+  if (out.textByClick && typeof out.textByClick === 'object') {
+    const keys = Object.keys(out.textByClick)
+      .map(k => Number(k))
+      .filter(n => Number.isFinite(n) && n >= 0)
+      .sort((a, b) => a - b)
+    const next = {}
+    let initial = null
+    let hadPast = false
+    for (const k of keys) {
+      const s = k - offset
+      if (s <= 0) {
+        initial = out.textByClick[String(k)]
+        hadPast = true
+      } else {
+        next[String(s)] = out.textByClick[String(k)]
+      }
+    }
+    if (Object.keys(next).length > 0) {
+      if (hadPast) next['0'] = initial
+      out.textByClick = next
+    } else {
+      delete out.textByClick
+      if (hadPast) {
+        if (Array.isArray(initial)) {
+          out.lines = initial
+          delete out.text
+        } else if (typeof initial === 'string') {
+          out.text = initial
+          delete out.lines
+        } else if (initial != null) {
+          out.text = String(initial)
+        }
+      }
+    }
+  }
+
+  return out
+}
+
+function shiftList(arr) {
+  if (!props.startAt) return arr ?? []
+  return (arr ?? []).map(shiftItem).filter(x => x != null)
+}
+
+// rawLookup is built from the **unshifted** spec so parent/snap resolution
+// stays geometrically correct even when the parent box is dropped by startAt.
+// (Coordinates don't depend on click visibility.)
 const rawLookup = computed(() => {
   const m = new Map()
   for (const b of props.spec.boxes ?? []) if (b.id) m.set(b.id, b)
@@ -66,9 +175,15 @@ const rawLookup = computed(() => {
   return m
 })
 
-const boxes = computed(() => normalize(props.spec.boxes, rawLookup.value))
-const groups = computed(() => normalize(props.spec.groups, rawLookup.value))
-const connectors = computed(() => props.spec.connectors ?? [])
+const boxes = computed(() => normalize(shiftList(props.spec.boxes), rawLookup.value))
+const groups = computed(() => normalize(shiftList(props.spec.groups), rawLookup.value))
+const connectors = computed(() => shiftList(props.spec.connectors))
+// Plain x/y axes for chart-style diagrams. Each axis: `kind` ('vertical' |
+// 'horizontal'), the perpendicular coord (`x` for vertical, `y` for
+// horizontal), and `from`/`to` along the parallel coord. Optional `label`
+// renders at the `labelAt` end (`'from'` default, `'to'`, or a number in
+// [0, 1]). Reveal/hide directives are honored like any other item.
+const axes = computed(() => shiftList(props.spec.axes))
 
 // `background` (single object) is syntactic sugar that prepends to `backgrounds`.
 // Both fields render as <image> elements under groups/connectors/boxes, sharing
@@ -77,7 +192,7 @@ const backgrounds = computed(() => {
   const out = []
   if (props.spec.background) out.push(props.spec.background)
   if (Array.isArray(props.spec.backgrounds)) out.push(...props.spec.backgrounds)
-  return out
+  return shiftList(out)
 })
 
 const lookup = computed(() => {
@@ -222,6 +337,57 @@ function pathFor(c) {
     else path += ` L ${cx} ${cy}`
   }
   return path
+}
+
+function axisGeometry(a) {
+  if (a.kind === 'vertical') {
+    if (a.x == null || a.from == null || a.to == null) {
+      throw new Error('Diagram: vertical axis needs x, from, to')
+    }
+    return { x1: a.x, y1: a.from, x2: a.x, y2: a.to }
+  }
+  if (a.kind === 'horizontal') {
+    if (a.y == null || a.from == null || a.to == null) {
+      throw new Error('Diagram: horizontal axis needs y, from, to')
+    }
+    return { x1: a.from, y1: a.y, x2: a.to, y2: a.y }
+  }
+  throw new Error(`Diagram: unknown axis kind "${a.kind}" (use "vertical" or "horizontal")`)
+}
+
+// Default label end: 'from' for vertical (top), 'to' for horizontal (right) —
+// matches the conventional "↑ y-axis" / "x-axis →" reading direction. Override
+// with `labelAt: 'from' | 'to'` or a numeric t in [0, 1] for midpoint labels.
+function axisLabelInfo(a) {
+  if (a.label == null || a.label === '') return null
+  const g = axisGeometry(a)
+  const at = a.labelAt ?? (a.kind === 'vertical' ? 'from' : 'to')
+  const pad = 10
+  let x, y, anchor, baseline
+  if (a.kind === 'vertical') {
+    x = g.x1
+    if (at === 'from') { y = Math.min(g.y1, g.y2) - pad; anchor = 'middle'; baseline = 'auto' }
+    else if (at === 'to') { y = Math.max(g.y1, g.y2) + pad; anchor = 'middle'; baseline = 'hanging' }
+    else if (typeof at === 'number') {
+      const t = Math.max(0, Math.min(1, at))
+      y = (1 - t) * g.y1 + t * g.y2
+      x = g.x1 - pad
+      anchor = 'end'; baseline = 'middle'
+    } else throw new Error(`Diagram: unknown axis labelAt "${at}"`)
+  } else {
+    y = g.y1
+    if (at === 'from') { x = Math.min(g.x1, g.x2) - pad; anchor = 'end'; baseline = 'middle' }
+    else if (at === 'to') { x = Math.max(g.x1, g.x2) + pad; anchor = 'start'; baseline = 'middle' }
+    else if (typeof at === 'number') {
+      const t = Math.max(0, Math.min(1, at))
+      x = (1 - t) * g.x1 + t * g.x2
+      y = g.y1 + pad
+      anchor = 'middle'; baseline = 'hanging'
+    } else throw new Error(`Diagram: unknown axis labelAt "${at}"`)
+  }
+  const dx = a.labelOffset?.dx ?? 0
+  const dy = a.labelOffset?.dy ?? 0
+  return { x: x + dx, y: y + dy, anchor, baseline, text: a.label }
 }
 
 function arrowMarkers(c) {
@@ -604,6 +770,16 @@ const wrapStyle = computed(() => {
 <image :href="bg.src" :x="bg.x" :y="bg.y" :width="bg.w" :height="bg.h" :opacity="bg.opacity ?? 1" preserveAspectRatio="none" />
 </g>
 </template>
+<template v-for="(a, ai) in axes" :key="`ax-${ai}`">
+<g v-if="isHideMode(a)" v-click-hide="hideDirective(a)" :class="['axis', a.style ? `axis-${a.style}` : null]">
+<line :x1="axisGeometry(a).x1" :y1="axisGeometry(a).y1" :x2="axisGeometry(a).x2" :y2="axisGeometry(a).y2" />
+<text v-if="axisLabelInfo(a)" class="axis-label" :x="axisLabelInfo(a).x" :y="axisLabelInfo(a).y" :style="{ textAnchor: axisLabelInfo(a).anchor, dominantBaseline: axisLabelInfo(a).baseline }">{{ axisLabelInfo(a).text }}</text>
+</g>
+<g v-else v-click="clickDirective(a)" :class="['axis', a.style ? `axis-${a.style}` : null]">
+<line :x1="axisGeometry(a).x1" :y1="axisGeometry(a).y1" :x2="axisGeometry(a).x2" :y2="axisGeometry(a).y2" />
+<text v-if="axisLabelInfo(a)" class="axis-label" :x="axisLabelInfo(a).x" :y="axisLabelInfo(a).y" :style="{ textAnchor: axisLabelInfo(a).anchor, dominantBaseline: axisLabelInfo(a).baseline }">{{ axisLabelInfo(a).text }}</text>
+</g>
+</template>
 <template v-for="g in groups" :key="`g-${g.id}`">
 <g v-if="isHideMode(g)" v-click-hide="hideDirective(g)" :class="['group', g.style ? `group-${g.style}` : null]">
 <ellipse v-if="g.shape === 'ellipse'" :cx="g.x + g.w / 2" :cy="g.y + g.h / 2" :rx="g.w / 2" :ry="g.h / 2" />
@@ -825,6 +1001,15 @@ const wrapStyle = computed(() => {
   fill: none;
   stroke: currentColor;
   stroke-width: 1.5;
+}
+.diagram .axis line {
+  stroke: currentColor;
+  stroke-width: 1.5;
+  opacity: 0.7;
+}
+.diagram .axis text {
+  font-size: 14px;
+  opacity: 0.75;
 }
 /* Wrapped text via <foreignObject>: center the div inside the bbox, match
    the inherited <text> styling so author can opt into wrap without restyling. */

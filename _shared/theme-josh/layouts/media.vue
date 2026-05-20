@@ -6,9 +6,15 @@ withDefaults(defineProps<{
   side?: 'left' | 'right'
   bleed?: boolean
   caption?: string
+  // Where the caption sits relative to the media frame. 'bottom' (default)
+  // stacks it below; 'right' / 'left' place it beside the frame as a slim
+  // sidebar (matches PPTX patterns where a small citation rect sits next to
+  // the figure rather than beneath it).
+  captionSide?: 'bottom' | 'right' | 'left'
 }>(), {
   side: 'right',
   bleed: false,
+  captionSide: 'bottom',
 })
 
 const slots = useSlots()
@@ -17,7 +23,11 @@ const slots = useSlots()
 <template>
   <div
     class="slidev-layout josh-media"
-    :class="[`side-${side}`, bleed ? 'bleed' : 'padded']"
+    :class="[
+      `side-${side}`,
+      bleed ? 'bleed' : 'padded',
+      `caption-${captionSide}`,
+    ]"
   >
     <div class="media-text">
       <FitContent align="center" origin="left center">
@@ -105,8 +115,8 @@ const slots = useSlots()
   font-weight: 600;
 }
 
-/* The media column wraps the frame + caption so they stack vertically,
-   with the frame taking the remaining height (after the caption). */
+/* The media column wraps the frame + caption. captionSide='bottom' stacks
+   them vertically; 'right'/'left' put the caption beside the frame. */
 .media-column {
   position: relative;
   min-height: 0;
@@ -114,6 +124,18 @@ const slots = useSlots()
   display: flex;
   flex-direction: column;
   justify-content: center;
+}
+
+.josh-media.caption-right .media-column {
+  flex-direction: row;
+  align-items: stretch;
+  gap: 0.9rem;
+}
+
+.josh-media.caption-left .media-column {
+  flex-direction: row-reverse;
+  align-items: stretch;
+  gap: 0.9rem;
 }
 
 /* The frame is the sized box the slot's content fills. `overflow: hidden`
@@ -159,5 +181,18 @@ const slots = useSlots()
   color: var(--josh-muted);
   letter-spacing: 0.02em;
   text-align: right;
+}
+
+/* Side captions: narrow rail beside the frame. No top margin (the row gap
+   handles spacing); align to top so a multi-line caption reads as a column
+   of metadata rather than a footnote. */
+.josh-media.caption-right .media-caption,
+.josh-media.caption-left .media-caption {
+  margin-top: 0;
+  align-self: flex-end;
+  max-width: 12rem;
+  text-align: left;
+  writing-mode: horizontal-tb;
+  padding-bottom: 0.4rem;
 }
 </style>

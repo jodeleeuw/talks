@@ -33,6 +33,8 @@ The script will:
 
 After the script runs, **read `_analysis.md`** end-to-end **and read the per-slide `_thumbnails/slide-N.png` for any slide that's non-trivial** — the PNG shows you what raw coordinates can't. Delete `_analysis.json`, `_analysis.md`, and `_thumbnails/` once you're done with them.
 
+The file opens with a `## Contents` table-of-contents — one line per slide with the slide's title (or first paragraph) and any annotation icons it has (`🪄`, `🎬×N`, `🔄`, `🔁`, `⚠`, `⛔`, `⛔text-swap`, `💡<dir>`). Scan the TOC first to spot the high-signal slides; then read those slides' detail blocks. Also: when a slide's shape geometry is identical to the previous slide's, the `**Shapes (px in deck coords):**` block elides with `_(identical to slide N)_` rather than repeating — the diff block above carries the per-transition signal.
+
 The `vite.config.ts` extends Vite's `server.fs.allow` to include the repo root so the deck can import the shared `_shared/diagram/Diagram.vue`. The `components/Diagram.vue` wrapper auto-registers `<Diagram>` globally for every slide via Slidev's `components/` auto-import.
 
 ### Source thumbnails
@@ -98,7 +100,9 @@ Watch especially for these transition shapes that are easy to miss:
 
 1. **Progressive bullets / shapes** — adjacent slides where each transition adds one or more elements. Each diff block = one click. Collapse with `<v-clicks>` (when the order matches DOM order) or `v-click="N"` (when it doesn't).
 2. **Diagram build-ups** — adjacent slides where new shapes appear over a constant base. Inside the `<Diagram>` spec, set `revealAt: N` on every element introduced by transition N — boxes, connectors, and groups all share the same N.
-3. **Image-swap reveals** — adjacent slides with **identical text** but **different pictures** (a single heading like "Is this multiple realizability?" with the photo pair swapping each click). The script flags these as `🔄 IMAGE-SWAP-REVEAL`. Collapse with a stack of positioned `<div>`s, one per state, gated by `v-click.hide="N"` / `v-click="[N, N+1]"` / `v-click="N"`. See the converted deck `tmp_talks/05-do-all-minds-work-the-same-way/` for a worked example.
+3. **Image-swap reveals** — adjacent slides with **identical text** but **different pictures** (a single heading like "Is this multiple realizability?" with the photo pair swapping each click), or layered photos where one image gets revealed regions on click. The script flags these as `🔄 IMAGE-SWAP-REVEAL` *only when one of three collapse signals is present*: shared heading/text, overlapping picture bboxes (layered), or constant non-picture overlay shapes (callouts annotating the swap). The recommended primitive is `<AnnotatedImage>` with N `<Layer src :at :reveal-at>` children — see "Annotated images" below. The older `<div class="stage">` + manual `v-click.hide` recipe still works but is more verbose.
+
+   **The complement: `🔁 ADJACENT-PICTURE-SLIDES`.** When adjacent picture slides have NO shared heading, NO overlapping bboxes, and NO constant overlay — they're disconnected illustrative examples. The script recommends **N separate `layout: image` slides with captions** in that case. Don't collapse; let the viewer page back and forth between examples instead of hiding them behind clicks.
 4. **Highlight reveals** — adjacent slides with **identical plain text** but **different per-run formatting** (a sentence is black on one slide and gray on the next; or numbers gain a strikethrough). The script flags these as `⚠ HIGHLIGHT-REVEAL` in the analysis and prints a per-run `[default] / [#XXXXXX] / [b] / [s] / [u]` breakdown under each formatted paragraph (`[s]` = strikethrough, `[u]` = underline; combined like `[bs]`, `[s+#FF0000]`). **Do not collapse these by stripping formatting** — that loses the speaker's emphasis cue. Instead, split the text into segments and bind a class to `$clicks`:
 
    ```md
@@ -135,7 +139,7 @@ When you write `v-click` straight on a `<p>` / `<span>` / `<div>`, you're hittin
 | Appear at click N, stay forever | `v-click="N"` | `revealAt: N` (or `reveal: { from: N }`) |
 | Visible during clicks A through B *inclusive* | `v-click="[A, B+1]"` (Slidev range is **half-open**) | `reveal: { from: A, to: B }` (component translates internally) |
 | Visible at click N only | `v-click="[N, N+1]"` | `reveal: { from: N, to: N }` |
-| Visible at start (click 0), hidden from click N onward | `v-click.hide="N"` | (use markdown `v-click.hide` outside the diagram — the spec has no dedicated form for this) |
+| Visible at start (click 0), hidden from click N onward | `v-click.hide="N"` | `hideAt: N` |
 | Never visible (don't ever do this) | `v-click="[N, N]"` ← **bug**: half-open `start <= current < end` means never active | n/a |
 
 Two specific cases the LSTM-style annotation swap hits:
@@ -188,7 +192,9 @@ When the analysis lists multiple shapes and connectors with positions, the slide
 #### Workflow per diagram slide
 
 1. Create `diagrams/<descriptive-name>.json` in the deck dir.
-2. In the slide section of `slides.md`, add a `<script setup>` block importing just that spec (Slidev scopes `<script setup>` per slide — every diagram slide needs its own import).
+2. In the slide section of `slides.md`, add a `<script setup>` block importing just that spec.
+
+> **`<script setup>` is per-slide.** Slidev compiles each slide as its own Vue component, so `<script setup>` blocks are scoped to the slide they appear in. Variables imported on slide 7 are *not* visible on slide 8 — every diagram slide needs its own `import` block (even when importing the same spec twice). A `slides.md` with N diagram slides has N `<script setup>` blocks, each importing what *that* slide uses. This is fine and expected; don't try to hoist them.
 3. Render with `<Diagram :spec="..." />`, optionally passing `class="..."` so the slide's scoped CSS can theme it via `:deep()`.
 
 ```md
@@ -205,328 +211,31 @@ import spec from './diagrams/my-diagram.json'
 </style>
 ```
 
-#### Spec schema
+#### Full spec reference
 
-```jsonc
-{
-  "w": 960, "h": 540,             // deck size from the analysis header (SVG viewBox)
-  "background": { "src": "./photo.png", "x": 0, "y": 0, "w": 960, "h": 540 },  // optional — SVG <image> behind everything. See note below
-  "backgrounds": [                // optional — array form for multiple layered backgrounds
-    { "src": "./layer.png", "x": 100, "y": 50, "w": 760, "h": 440, "opacity": 0.8, "revealAt": 2 }
-  ],
-  "groups": [                     // optional, rendered behind boxes (encoder/decoder containers, etc.)
-    { "id": "g1", "x": 100, "y": 380, "w": 200, "h": 80, "text": "ENCODER", "style": "..." }
-  ],
-  "boxes": [
-    {
-      "id": "input1",             // referenced by connectors as "input1.top|right|bottom|left|center"
-      "x": 200, "y": 270, "w": 100, "h": 44,  // pixel coords in the viewBox space — copy straight from the analysis
-      "shape": "ellipse",         // optional — "ellipse" or one of the arrow shapes; default is a rectangle. See "Shapes" below
-      "anchor": "top-left",       // optional, where (x, y) sits on the box — see below (default: top-left)
-      "parent": "frame",          // optional, treat (x, y) as offsets from another box's top-left — see below
-      "text": "Input",            // single line — or use `lines` / `"a\nb"` for multi-line, see "Text" below
-      "lines": ["Input", "(US)"], // optional — array form for multi-line; takes precedence over `text`
-      "wrap": true,               // optional — auto-wrap text to the box width via <foreignObject>. See "Text" below
-      "maxWidth": 180,            // optional — px cap on wrap width (implies wrap)
-      "textRotate": "vertical-up", // optional — degrees number or "vertical-up"/"vertical-down". See "Rotated text"
-      "style": "rnn",             // optional, becomes CSS class `box-rnn` on the <g> element
-      "fill": "#999999",          // optional explicit fill (overrides theme CSS) — see Fills below
-      "rx": 3,                    // optional corner radius (default 3 for boxes, 4 for groups)
-      "revealAt": 2,              // optional, appear at click N and stay (shorthand for `reveal: { from: N }`)
-      "reveal": { "from": 1, "to": 2 },   // optional, visible from click 1 through click 2 — see Reveals below
-      "hideAt": 1,                // optional, visible at start, hidden from click N onward — see Reveals below
-      "textByClick": { "3": "f(X)", "4": ["1 if X ≥ T", "0 if X < T"] }   // optional — swap text content per click, see Per-click text swaps below
-    }
-  ],
-  "connectors": [
-    { "from": "input1.top", "to": "emb1.bottom" },                              // straight, both ends snapped, default arrow at end
-    { "from": "rnn1.top", "to": "attn.left", "route": "VH" },                   // V then H — sharp elbow at (rnn1.x, attn.y)
-    { "from": "rnn1.top", "to": "attn.left", "via": [{ "y": "attn.center" }] }, // same elbow via an explicit waypoint
-    { "from": "a.right", "to": "b.top", "outset": 20 },                         // perpendicular leave + perpendicular arrive (PPTX bent4-style)
-    { "from": "node.right", "to": "node.top", "outset": 30 },                   // self-loop on adjacent sides — auto-wraps around the corner
-    { "from": [330, 168.1], "to": "rnn1.bottom" },                              // free endpoint as a literal tuple
-    { "from": { "snap": "rnn1.top", "dy": 50 }, "to": "data.top" },             // free endpoint as a snap+offset
-    { "from": "a.right", "to": "b.left", "style": "highlight", "arrow": false },
-    { "from": "out.top", "to": "in.bottom", "arrow": "reverse" },               // arrow at the start instead — see Arrows below
-    { "from": "a.right", "to": "b.left", "arrow": "both" },                     // arrows at both ends
-    { "from": "act.right", "to": "out.left", "label": "signal" },               // text along the path — see Connector labels below
-    { "d": "M 776 168 Q 700 100 600 180", "style": "curve" }                    // raw SVG path — fallback for curves
-  ]
-}
-```
+The `<Diagram>` API — every prop, every spec field, snap/route/outset syntax, reveal semantics, theming hooks — lives in [`_shared/diagram/SPEC.md`](../../../_shared/diagram/SPEC.md). **Read it once before writing your first spec.** This skill only covers the PPTX → spec translation; everything else is in SPEC.md.
 
-**Box positions:** raw pixel coords in the `viewBox` coordinate system — the analysis already gives them in this form, so copy directly.
+#### Mapping prep.py annotations to spec fields
 
-**Shapes:** boxes default to a rectangle (`<rect>`). Set `shape:` to switch the geometry:
+What the analysis surfaces and where it lands in the spec:
 
-| value | renders | notes |
-| --- | --- | --- |
-| omitted | rectangle | default — uses `rx` for corner radius (default 3) |
-| `"roundRect"` | rounded rectangle | default `rx = min(min(w, h) * 0.15, 30)`; explicit `rx` still overrides. Matches PPTX `<a:prstGeom prst="roundRect">`. |
-| `"ellipse"` | ellipse / circle | radius is half the bbox in each axis |
-| `"arrow"` / `"rightArrow"` | chunky horizontal arrow → | stem 65% of width × 50% of height; head fills the remaining width and full height |
-| `"leftArrow"` | chunky horizontal arrow ← | mirror of rightArrow |
-| `"upArrow"` | chunky vertical arrow ↑ | stem at bottom, head at top |
-| `"downArrow"` | chunky vertical arrow ↓ | stem at top, head at bottom |
+| Analysis annotation | Spec field | Notes |
+|---|---|---|
+| Position `(x, y, w, h)` on a shape | `x`, `y`, `w`, `h` | Already in viewBox coords — copy directly. |
+| `shape=ellipse` / `roundRect` / `rightArrow` / `leftArrow` / `upArrow` / `downArrow` | `shape` | PPTX `<a:prstGeom>` shapes. Default is rectangle when omitted. |
+| `fill=#RRGGBB` | `fill` | Inline color override. PPTX scheme colors are deliberately skipped (they default to white/dark and would clobber the theme). |
+| `vert=270` | `textRotate: "vertical-up"` | CCW, reads bottom-up. |
+| `vert=90` | `textRotate: "vertical-down"` | CW, reads top-down. |
+| Connector arrow modifier (`arrow=reverse`/`both`/`none`) | `arrow` | From `<a:headEnd>` / `<a:tailEnd>`. Default (`forward`) means omit the field. |
+| `**[SELF-LOOP]**` or `**[MULTI-BEND]**` flags | `outset` + optional `via` | The analysis prints a suggested spec snippet on the next line — paste that rather than the raw `d=`, because snap refs stay coherent if positions shift. |
+| Background photo per slide | `background:` or `backgrounds[]` | But see PDF-export caveat below. |
 
-PPTX exports the four arrow variants as native shapes (`<a:prstGeom prst="downArrow">` etc.); the analysis surfaces them on the shape line so you can copy `shape: "downArrow"` directly. Snap references (`box.top` / `bottom` / `left` / `right` / `center`) resolve to the bbox edges, not the arrow's silhouette — connectors anchored to an arrow box land at the bbox edge, just like any rect.
+**PDF-export caveat for `background` / `backgrounds`:** the SVG `<image>` element these generate can render dim or be omitted entirely by Playwright + Chromium under some PDF export configurations.
 
-Text inside an arrow centers within the stem portion (not the head triangle), so labels read cleanly along the shaft.
+- **Photographs and gradient-heavy rasters** → prefer the `<AnnotatedImage>` recipe (HTML `<img>` for the base) rather than the SVG `<image>` element. This is the case the PDF-export pipeline gets wrong.
+- **Line-art figures / chart screenshots / clean-edged diagrams** → `backgrounds:` (or `background:`) is fine. These render reliably in PDF export and let you use the diagram coord system for overlay annotations without extra wrapping markup.
 
-**Backgrounds:** the top-level `background` (single) or `backgrounds` (array) fields render `<image>` elements underneath every group/connector/box in the SVG. Each entry takes `src`, `x`, `y`, `w`, `h`, optional `opacity` (default `1`), and all the reveal forms (`revealAt` / `reveal: { from, to }` / `reveal: { from, until }` / `hideAt`). `background` is sugar for prepending to `backgrounds`. Use both together; they merge.
-
-**Caveat — SVG `<image>` vs HTML `<img>`:** the `background` field works fine for screen rendering but can render dim or be omitted entirely by Playwright + Chromium under some PDF export configurations. **For photographic backgrounds in slides you plan to export to PDF, prefer the HTML `<img>` recipe in the "Animated annotated photographs" section** — wrap the slide in a `.stage` div, put `<img>` elements with `v-click` directives behind the `<Diagram>`, and keep the spec to overlay shapes only. The `background` field is still useful for programmatic patterns, `data:` URIs, or live-only viewing, but the HTML wrapper is what we recommend for production decks.
-
-**Anchor:** by default `(x, y)` is the box's **top-left corner** (matching the analysis output). Set `anchor` to reposition where `(x, y)` lands on the box — handy when you want to center a box on a known point or align it to a corner. Supported values: `top-left` (default), `top`, `top-right`, `left`, `center`, `right`, `bottom-left`, `bottom`, `bottom-right`. The 9-position grid corresponds to the same edge/corner names used by snap references on the other side. Example:
-
-```jsonc
-// place a callout label centered on (500, 100)
-{ "id": "note", "x": 500, "y": 100, "w": 200, "h": 40, "anchor": "center", "text": "see above" }
-```
-
-**Parent:** set `parent: "<otherBoxId>"` to make `(x, y)` an offset from the parent's top-left instead of an absolute viewBox position. Useful when a diagram has a repeated module (e.g. an LSTM gate) whose internals are easier to express relative to the module's frame — once the frame is placed, every child reuses the same locals. Parents resolve recursively; the parent itself can have a parent. Anchor offsets are applied in the box's local frame before the parent translation.
-
-```jsonc
-// two modules with identical internal structure — only the parent changes
-{ "id": "m1", "x": 95.7, "y": 125.0, "w": 148, "h": 306, "style": "module" },
-{ "id": "m1-w", "parent": "m1", "x": 17.4, "y": 220.4, "w": 50, "h": 30, "text": "W0" },
-{ "id": "m2", "x": 270.9, "y": 125.6, "w": 148, "h": 306, "style": "module" },
-{ "id": "m2-w", "parent": "m2", "x": 17.4, "y": 220.4, "w": 50, "h": 30, "text": "W2" }  // same locals
-```
-
-Snap references (`"m1-w.top"`) always resolve to slide-absolute coords, so connectors don't need to know whether a target is parented.
-
-#### Point and axis resolution
-
-Connector endpoints (`from`, `to`) accept three forms:
-
-```jsonc
-"attention.left"                                  // snap reference — center of named edge
-[330, 168.1]                                      // literal [x, y] tuple
-{ "snap": "enc1-rnn.top", "dy": 50, "dx": 0 }     // offset relative to a snap point
-```
-
-`via` items pin one or both axes. `x` and `y` accept three forms:
-
-```jsonc
-{ "y": 102.8 }                                    // literal value
-{ "y": "attention.center" }                       // snap reference — pulls the y of attention.center
-{ "y": { "snap": "attention.top", "offset": -20 } }  // offset relative to a snap's axis value
-```
-
-When a via specifies only `x` (or only `y`), the other axis is inherited from the previous waypoint. This is what makes V-then-H routing work without spelling out both coordinates:
-
-```jsonc
-// "from enc1-rnn.top, up to attention's vertical center, then across to attention.left"
-{ "from": "enc1-rnn.top", "to": "attention.left", "via": [{ "y": "attention.center" }] }
-```
-
-Snap references are `"<boxId>.<side>"` where side is `top | right | bottom | left | center`. The `id` matches a box or group `id` from the spec.
-
-#### Orthogonal-routing shorthand
-
-For the common case of a single 90° elbow, `route` skips the explicit waypoint:
-
-```jsonc
-{ "from": "w0.top", "to": "plus.bottom", "route": "VH" }   // up first, then over
-{ "from": "a.right", "to": "b.top", "route": "HV" }        // across first, then down
-```
-
-Accepted aliases (case-insensitive): `VH` / `vh` / `vertical-horizontal`, `HV` / `hv` / `horizontal-vertical`. `VH` means "leave the start vertically, then turn 90° horizontally to reach the end"; `HV` is the opposite. If both `route` and `via` are set, the route elbow is inserted first, then the via waypoints. Prefer `route` for single-bend connectors and `via` for anything more elaborate.
-
-#### `outset`: perpendicular leave / arrive (and self-loops)
-
-`outset: N` pushes each snapped endpoint **perpendicular to its face** by `N` px before routing kicks in. This matches PowerPoint's bent-connector behavior (every bent4/bent5 in a PPTX leaves and arrives perpendicular to the connected face) and is what makes self-loops on the same shape route cleanly around it.
-
-```jsonc
-// PPTX bentConnector4 ("leave perpendicular, wrap around, arrive perpendicular")
-{ "from": "a.right", "to": "b.top", "outset": 20 }                              // L-bend between the two stubs
-{ "from": "a.right", "to": "b.left", "outset": 20, "via": [{ "x": 500 }] }      // Z-bend, midpoint at x=500
-
-// Asymmetric outsets
-{ "from": "a.right", "to": "b.top", "outset": { "from": 30, "to": 10 } }
-
-// Self-loop on adjacent sides — outset alone, auto-corner around the shape
-{ "from": "node.right", "to": "node.top", "outset": 30 }
-
-// Self-loop on the same side — use snap+dx/dy to spread the endpoints, then outset closes the loop
-{ "from": { "snap": "node.top", "dx": -10 }, "to": { "snap": "node.top", "dx": 10 }, "outset": 30 }
-```
-
-How it works internally:
-
-1. Each snapped endpoint gets a "stub" point pushed perpendicular by its outset value (the side encoded in the snap reference — `top`/`right`/`bottom`/`left` — determines the direction).
-2. `route` / `via` operate **between the stubs**, so any explicit mid-routing sits between the perpendicular approach segments and doesn't disturb them.
-3. **Self-loop auto-corner.** When `from` and `to` snap to the **same shape id** on **perpendicular sides** (e.g. `right` → `top`) and you give no `route`/`via`, the component inserts a single L-corner between the two stubs. The corner lands outside the shape, so the path naturally wraps around it.
-4. Same-side self-loops (e.g. `top` → `top`) need offset endpoints (`{ snap, dx, dy }`) so the start and end aren't the same point. Once the endpoints are spread, the symmetric outset values produce a clean three-segment loop with no extra `via` needed.
-
-When prep.py flags a connector as `**[SELF-LOOP]**` or `**[MULTI-BEND]**` in the analysis, it also suggests the `outset` spec form on the next line — prefer that form over pasting the raw `d="…"` it generated, because snap refs stay coherent when box positions move.
-
-#### When to use raw `d` (escape hatch)
-
-The `d` field is the SVG path `d` attribute — the same `M`/`L`/`H`/`V`/`Q`/`C` mini-language the analysis emits for every connector. Prefer `from`/`to`/`via` for everything orthogonal; reach for `d` only when:
-- the source has a freeform curve (Bézier) the waypoint model can't express,
-- you want to preserve the analysis's suggested `d` verbatim and don't care about anchoring it semantically.
-
-The analysis prints a ready-to-paste `d="…"` for every source connector. Snap when you can (more readable, edits stay coherent if box positions shift), use `d` when you must.
-
-#### Text (single line, multi-line, line-wrapping)
-
-`text` defaults to a single line. For multi-line text in a box or group:
-
-```jsonc
-{ "text": "Line 1\nLine 2" }                   // newlines inside a single string
-{ "text": ["Line 1", "Line 2"] }               // array form
-{ "lines": ["Line 1", "Line 2"], "text": "" }  // explicit `lines` (takes precedence)
-```
-
-All three render as multiple `<tspan>`s vertically centered around the box's center, with 1.2em line height. Pick line breaks deliberately. Don't paste the analysis's ` | `-joined string as-is into `text:` (that renders the `|` literally) — split into `lines`. The analysis prints multi-paragraph shape text either as a fenced block (multi-paragraph case) or ` | `-joined (legacy / diff-blocks); either way, one paragraph → one `lines[]` entry.
-
-**Auto-wrap.** For one-off long labels that should wrap to the box, set `wrap: true` (or `maxWidth: <px>`) instead of pre-splitting:
-
-```jsonc
-{ "id": "note", "x": 600, "y": 230, "w": 280, "h": 90,
-  "text": "What do these different circuits have in common?", "wrap": true }
-```
-
-Wrapped text renders via `<foreignObject>` + a centered `<div>` so the browser handles word-break and line-height. `maxWidth` (px) clamps the inner width below the box width — useful when you want narrower text inside a wider box. Without `wrap`/`maxWidth`, the component falls through to the existing `<text>`/`<tspan>` path — existing decks render byte-identically.
-
-#### Rotated text (`textRotate`)
-
-For labels that should run vertically (PPTX `<a:bodyPr vert="vert270">`, or any custom rotation), set `textRotate` on the box:
-
-```jsonc
-{ "text": "REDUCTIONISM", "textRotate": "vertical-up" }    // -90° / CCW (reads bottom-up)
-{ "text": "EMERGENCE",    "textRotate": "vertical-down" }  // 90° / CW  (reads top-down)
-{ "text": "10°",          "textRotate": 10 }               // arbitrary degrees, CSS convention (positive = CW)
-```
-
-The whole `<text>` (multi-line `<tspan>`s included) and any `<foreignObject>` wrap rotate together as a block, centered on the box's geometric center. The analysis emits `vert=270` / `vert=90` on shapes whose text is rotated — feed that straight into `textRotate`.
-
-#### Fit modes (`fit` prop)
-
-By default the `<Diagram>` wrapper locks itself to the spec's `w / h` aspect ratio. Width comes from the parent; height is computed. That works when the diagram is the only content on the slide, but on a slide with a title / paragraph / footer above and below, a 16:9 spec is taller than the available area and the bottom rows get clipped.
-
-Pass `fit="container"` to switch the wrapper to `width: 100% / height: 100%` and let the SVG's `preserveAspectRatio="xMidYMid meet"` scale the drawing inside the available bounds. The parent must constrain height — put the `<Diagram>` inside a flex-1 wrapper:
-
-```md
-<div class="diagram-wrap">
-  <Diagram class="my-diagram" fit="container" :spec="spec" />
-</div>
-
-<style scoped>
-.diagram-wrap { flex: 1 1 0; min-height: 0; display: flex; justify-content: center; }
-</style>
-```
-
-Default (`fit="aspect"`) is fine when the diagram *is* the slide — no title above. Use `fit="container"` whenever you wrap the diagram with a heading or trailing caption.
-
-#### Fills
-
-By default a box's fill comes from the theme CSS — usually `var(--slidev-theme-bg, transparent)` so the box reads through the slide background. Set `fill: "#RRGGBB"` on a box to override that with an explicit color. The prep script extracts every `<a:solidFill><a:srgbClr>` from the source PPTX and surfaces it as `fill=#RRGGBB` on the per-shape line in the analysis — copy those values straight into the spec.
-
-```jsonc
-{ "id": "h1", "x": 339, "y": 249, "w": 43, "h": 43, "shape": "ellipse", "fill": "#999999" }
-```
-
-When to use `fill` vs CSS theming:
-
-- **Explicit `fill`** — when the source uses color to encode information that varies per-shape (grayscale activity in neurons, traffic-light status, per-cell highlights). The color belongs to *this shape on this slide*, not to a class of shapes. The fill survives slide-to-slide build-ups: a `text/fill changes on existing shapes` entry in a diff block usually means the author is animating a recolor across clicks (e.g. activations propagating through a network).
-- **CSS class `style:` + `:deep()` rule** — when an entire category of shapes shares a theme color (every `box-rnn` is faint orange). Set `style: "rnn"` on the boxes and theme it once in `<style scoped>`.
-
-Use both together when most shapes follow a category color but a few need to break out: set both `style: "neuron"` (for the stroke/baseline look) and `fill: "#434343"` (for this specific neuron's activity level). The inline `fill` style wins because it's bound as an element style attribute, not a CSS rule.
-
-Schemes / theme color references (`<a:schemeClr>` in PPTX) are deliberately skipped by the extractor — those default to white/dark and would clobber the theme.
-
-#### Arrows
-
-Each connector has an `arrow` field. Accepted values:
-
-| value | renders | notes |
-| --- | --- | --- |
-| omitted / `true` / `"forward"` | arrowhead at the `to` end | default |
-| `false` / `"none"` | no arrowheads | for label ties, brackets, decorative lines |
-| `"reverse"` | arrowhead at the `from` end | flip without rewriting `from`/`to` |
-| `"both"` | arrowheads at both ends | bidirectional / double-headed |
-| `{ start: bool, end: bool }` | explicit booleans | rarely needed |
-
-The prep script reads PowerPoint's `<a:headEnd>` / `<a:tailEnd>` and computes `arrow=forward|reverse|both|none` for every source connector — copy that value straight into the spec when it isn't `forward`.
-
-#### Reveals
-
-Four forms, all work on boxes, groups, and connectors:
-
-- `revealAt: N` — appear at click `N` and stay forever. Shorthand for `reveal: { from: N }`.
-- `reveal: { from: A, to: B }` — visible from click `A` through click `B`, **inclusive on both ends**, then hidden. Useful when an explanatory label needs to swap each step of a build-up. The component handles the translation to Slidev's half-open internal range — you write inclusive coordinates and they work as written.
-- `hideAt: N` — **visible at start, hidden from click `N` onward**. The complement of `revealAt`. Routed through Slidev's `v-click-hide` directive internally, which sidesteps the `0 → 1` normalization trap, so `hideAt: 1` does what you'd expect (visible at click 0, hidden from click 1).
-- `reveal: { from: A, until: B }` — visible from `A` through `B-1` (half-open, parallel to Slidev's `v-click="[A, B]"`). Use `from`+`until` when the upper bound is "hide at click N onward"; use `from`+`to` when it's "still visible at click N."
-
-```jsonc
-{ "id": "explain-forget", "text": "The forget gate…", "reveal": { "from": 1, "to": 1 } },  // visible at click 1 only
-{ "id": "explain-input",  "text": "The input gate…",  "reveal": { "from": 2, "to": 2 } }   // visible at click 2 only
-```
-
-Slidev derives the slide's total click count from the highest value seen in any `v-click` directive on the slide. Use the bare `revealAt: N` form (or `reveal: { from: N }`) for "appear and stay" — **never** put an artificially large sentinel like `99` in the upper bound, because Slidev will then require 99 clicks before advancing.
-
-Don't pass `0` as `from`/`to`/`revealAt` — Slidev normalizes 0 to 1 with a console warning, so the result won't be what you wrote. If you need an element visible at the initial state and hidden after click 1, put it outside the Diagram spec and use `v-click.hide="1"` directly on the Vue element (see the direct `v-click` gotchas section above).
-
-If a build-up needs the same element to *move* between clicks (e.g. an Output box at one y-coord for clicks 0–1, then a different y-coord from click 2 onward), declare two boxes with overlapping coords and complementary `reveal` ranges. There's no built-in tween.
-
-#### Per-click text swaps (`textByClick`)
-
-When the *same* box gains or swaps text as clicks advance, use `textByClick` instead of declaring ghost-overlay boxes at the same coords. The mapping is `{ "<click>": <string | string[]> }` and is **last-key-wins**: the largest key `≤ current click` decides what to render. Strings are single-line; arrays render as multi-line `lines`.
-
-```jsonc
-{
-  "id": "act", "x": 620, "y": 355, "w": 140, "h": 60, "style": "act",
-  "textByClick": {
-    "3": "f(X)",
-    "4": ["1 if X ≥ T", "0 if X < T"]
-  }
-}
-```
-
-- Click 0–2: no text (the box is empty).
-- Click 3: `"f(X)"`.
-- Click 4 onward: the two-line threshold rule.
-
-If you also set the static `text`/`lines` and omit a `"0"` key, the static content fills click 0 until the smallest `textByClick` key fires. An explicit `"0"` key replaces the static content as the initial state.
-
-Geometry never changes — only the rendered text. Total click count is derived automatically (every state's `v-click`/`v-click-hide` bound participates in Slidev's `maxMap`), so adding `textByClick: { "4": ... }` correctly extends the slide's click total.
-
-Prefer `textByClick` over the ghost-overlay-box pattern whenever the only thing changing is the text content of a stable shape — it's one box instead of three, and the JSON stays readable.
-
-#### Connector labels (`label`, `labelAt`, `labelOffset`)
-
-Render a text label along a connector path. The label inherits the connector's reveal/hide directive (so hiding the connector hides the label), and it sits at the post-`outset` tip — not the snap point.
-
-```jsonc
-{ "from": "act.right", "to": "out.left", "label": "signal" }                 // text right of the end tip (default)
-{ "from": "a.right", "to": "b.left", "label": "X = 5", "labelAt": 0.5 }      // midpoint, centered above the line
-{ "from": "in.bottom", "to": "out.top", "label": "h", "labelAt": "start" }   // at the start tip, left-aligned
-```
-
-- `labelAt: 'end'` (default) — label anchored at the `to` tip, left-aligned (text reads right of the tip). Default offset `{ dx: 8, dy: 0 }`.
-- `labelAt: 'start'` — anchored at the `from` tip, right-aligned. Default offset `{ dx: -8, dy: 0 }`.
-- `labelAt: <number>` — fraction `t ∈ [0, 1]` along the straight line between the two terminal coords. Centered above the line. Default offset `{ dx: 0, dy: -10 }`. Best for straight/orthogonal connectors; the numeric form doesn't follow curved paths.
-- `labelOffset: { dx?, dy? }` — fine-tune offset from the computed anchor point.
-
-`labelInfo` returns `null` (no label rendered) when the connector uses a raw `d:` path — labels need resolvable `from`/`to` endpoints. Fall back to a no-border text box at that location if you need a label on a curve.
-
-Style the label via the connector's `style`: a connector `{ style: "callout", label: "…" }` renders `<text class="connector-callout">`, themable in scoped CSS as `.diagram-name :deep(.connector-callout text) { ... }`.
-
-#### Theming
-
-The component bakes in: `currentColor` strokes, transparent fill defaulting to `var(--slidev-theme-bg)`, group rects dashed at 0.6 opacity, text using inherited font. Per-deck theming goes in the slide's `<style scoped>` block:
-
-```css
-.my-theme :deep(.box-rnn rect)    { fill: rgba(255, 153, 0, 0.12); }
-.my-theme :deep(.box-label rect)  { stroke: none; fill: transparent; }
-.my-theme :deep(.box-label text)  { font-style: italic; }
-.my-theme :deep(.connector-skip path) { stroke: #d33; stroke-width: 2.5; }
-```
-
-`:deep()` is required because the slide's scoped CSS can't reach inside the Diagram component otherwise. The class on each generated element is `box-<style>`, `group-<style>`, or `connector-<style>` — pick semantic `style` values in the spec (`rnn`, `attention`, `label`, `callout`, `arc`, `highlight`, …) so the CSS reads.
+The `background` field is also fine for programmatic patterns, `data:` URIs, or live-only viewing.
 
 #### When to give up on `<Diagram>` (and just use the source PNG)
 
@@ -572,93 +281,115 @@ Beyond the geometry/text dump and diff blocks, `_analysis.md` emits a few semant
 - ` 🎨 full-slide overlay (likely a darken scrim over a background picture)` — a slide-sized opaque rect at (0,0), low luminance. **Don't render this as a content shape.** It's a darkening scrim over a background photo; treat the picture beneath as a background and put the overlay in CSS (a `linear-gradient` over the image, or `theme-josh`'s `image-bg` layout with `darken: 0.6`).
 - ` ✂ crop l=…% t=…% r=…% b=…%` on a picture — the source image is wider/taller than the bbox; only the visible portion shows. See "Cropped pictures" below for the wrapper recipe.
 - ` ⚠ video placeholder` on a picture — the source had an embedded video; Google's PPTX export replaced it with a thumbnail. The `<deck>.videos.json` sidecar has the original URL/embed metadata. See "Videos" below.
-- `🔄 IMAGE-SWAP-REVEAL` (slide annotation) — same heading as previous slide but pictures changed. Collapse into one Slidev slide with click-gated image stacks.
+- `🔄 IMAGE-SWAP-REVEAL` (slide annotation) — adjacent slides where the pictures change AND at least one collapse signal is present: a shared heading/text, overlapping picture bboxes (layered swap, not alternatives), or constant non-picture overlay shapes (callouts annotating a changing photo). The annotation lists which signals fired. Collapse into one Slidev slide — `<AnnotatedImage>` is the recommended primitive (see "Annotated images" below).
+- `🔁 ADJACENT-PICTURE-SLIDES` (slide annotation) — adjacent slides with different pictures but **none** of the IMAGE-SWAP-REVEAL collapse signals (no shared heading, no overlapping bboxes, no constant overlay). These are disconnected illustrative examples that happen to sit next to each other. **Recommend N separate `layout: image` slides with captions** rather than a click-collapsed swap stack. The N-separate-slides form lets the viewer page back and forth between examples instead of hiding them behind clicks.
 - `⚠ HIGHLIGHT-REVEAL` (slide annotation) — same text as previous slide but per-run formatting (strike, color, bold) changed. Collapse with `$clicks`-bound CSS classes.
 - `💡 Mermaid candidate (LR|TB)` (slide annotation) — see "When to use Mermaid instead" below.
-- `🎬 PPTX animation — N clicks built into this slide` (slide annotation, between the diff block and per-element listings) — the source slide has in-PPTX animations on its shapes (entrance, exit, emphasis, motion). The annotation lists each user-click group with its target spids and effect kind. **This is the highest-signal cue in the whole analysis**: you're not collapsing duplicate source slides into clicks; you're literally reading the click reveals the original author embedded into a single slide. Map every group to a `revealAt: N` on the corresponding shape/picture/connector. Note that animation targets can be pictures too (PPTX `<p:pic>` elements), which appear in the slide's `**Pictures:**` block — match the spid in the annotation against the shape's `#NNN` id or by position. See "Animated annotated photographs" below for the canonical recipe.
-- `🪄 Freeform/dense figure (N shapes, M with no text)` (slide annotation, near the top) — the slide is a hand-drawn drawing, freeform diagram, or decorative mesh (X/O on a board, network spaghetti). Trying to recreate this in `<Diagram>` is wasted effort — use `layout: image` with the source thumbnail. The accompanying suggestion in the annotation gives you the exact `<img>` path. Triggers when there are ≥ 12 positioned shapes, ≥ 55% have no text, AND there are ≥ 12 empty shapes in absolute terms (gates out perceptron-style schematics that hit the ratio early in their build).
-- `⛔ scene change` (diff-block header swap) — replaces the usual "treat the whole block as one click" hint. Fires when ≥ 70% of the prior slide's shapes are removed and at least one is added — i.e., slide N+1 is a fresh slide, not a build-up of slide N. **Do not** wrap the affected slides as `v-click` reveals; just author them as separate Slidev slides. Triggers when prior slide had ≥ 5 shapes.
+- `🎬 PPTX animation — N clicks built into this slide` (slide annotation, between the diff block and per-element listings) — the source slide has in-PPTX animations on its shapes (entrance, exit, emphasis, motion). The annotation lists each user-click group with its target spids and effect kind. **This is the highest-signal cue in the whole analysis**: you're not collapsing duplicate source slides into clicks; you're literally reading the click reveals the original author embedded into a single slide. Map every group to a `revealAt: N` on the corresponding shape/picture/connector. Note that animation targets can be pictures too (PPTX `<p:pic>` elements), which appear in the slide's `**Pictures:**` block — match the spid in the annotation against the shape's `#NNN` id or by position. See "Annotated images" below for the canonical recipe when overlay boxes/labels animate over a photograph.
+
+  **Click-run collapse.** When N (≥ 3) consecutive clicks all target the same shape with the same effect, the listing collapses to one line like `clicks 1–11: shape #237 (entrance × 11 consecutive — likely a paragraph or bullet build on a single text shape)`. When PPTX has an explicit `<p:bldP build="p">` marker on that shape (paragraph-by-paragraph build), the line names it directly. If the paragraph count from the shape's text doesn't match the click count (PPTX sometimes emits one extra click per nested bullet build), the line flags the mismatch.
+- `🪄 Freeform/dense figure (N shapes, M with no text)` (slide annotation, near the top) — the slide is a hand-drawn drawing, freeform diagram, or decorative mesh (X/O on a board, network spaghetti). Trying to recreate this in `<Diagram>` is wasted effort — use `layout: image` with the source thumbnail. The accompanying suggestion in the annotation gives you the exact `<img>` path. Triggers when there are ≥ 12 positioned shapes, ≥ 55% have no text, AND there are ≥ 12 empty shapes in absolute terms (gates out perceptron-style schematics that hit the ratio early in their build). A second-stage check disables the flag when the empty shapes look like the unlabeled member of a labeled-grid pair (≥ 80% share an X coordinate, or each has a non-empty sibling within `2 × shape_width` horizontally) — those are tractable in `<Diagram>` as two-column layouts.
+- `⛔ scene change` (diff-block header swap) — replaces the usual "treat the whole block as one click" hint. Fires on either of: (a) ≥ 70% of a 5+ shape prior is wiped + at least one new shape added, or (b) 100% of the prior's shapes are removed regardless of count (catches title → body transitions that path (a)'s 5-shape gate misses). **Do not** wrap the affected slides as `v-click` reveals; author them as separate Slidev slides.
+- `⛔ text-swap scene change` (diff-block header swap) — every shape stayed put but the *only* change is a text replacement on a single shape, and the new text shares no word tokens with the old (Jaccard ≤ 0.15). The "stable banner with rotating content" pattern, where the source author rotated unrelated content through one persistent text frame. Treat as a fresh slide, not a click-driven swap.
 - `decorative slivers (cropped views of the same image, likely a parallax/stripe overlay; not load-bearing)` — surfaced both in the per-slide `**Pictures:**` block and inside `added pictures` / `removed pictures` diff entries. Means the source author tiled many thin cropped strips of a single image as background decor. Skip them entirely — render the un-cropped image as the slide background (e.g. via `layout: image-bg`) and ignore the slivers. The diff block's count in the `(N)` header stays accurate (semantic content unchanged); only the per-entry rendering collapses.
 
 **Multi-paragraph shape text.** When a shape has more than one paragraph, the per-slide listing emits a fenced block under the geometry line (not the inline `text='...'` form). Diff blocks still join with ` | ` because they need to be compact. Either way: one paragraph = one `<p>` (or one `lines[]` entry) when you author the slide.
 
 **Run-format tags.** Inside the per-paragraph breakdown, runs are tagged like `` [default] `` / `` [b+#FF0000] `` / `` [is] `` / `` [u] `` where letters mean: `b` bold, `i` italic, `s` strikethrough, `u` underline. They collapse into one token (`[bs]` = bold + strike) and a `+#RRGGBB` color suffix follows when present. Strike and underline pass through to your slide via GFM (`~~text~~` for strike) or inline CSS — no special component needed.
 
-### Animated annotated photographs
+### Inline theme-josh components
 
-When a slide has the `🎬 PPTX animation` annotation **and** the underlying content is a photograph (or other raster image) with overlay annotations — bounding-box callouts, stat readouts, arrows, labels — the canonical pattern is **HTML `<img>` for the raster layers + `<Diagram>` for the overlay shapes**, with click-driven reveals on whichever layers the annotation says are animated.
+Beyond `<Diagram>`, the `theme-josh` theme ships a handful of inline components that auto-register on every slide.
 
-The PPTX-export pipeline preserves the raster images as `image*.png` and the overlay shapes as positioned rectangles/roundRects in the analysis. The `🎬 PPTX animation` block tells you which spids enter on each click.
+- `<Hi>text</Hi>` — keyword highlight. Variants: `marker` (default; underlay), `solid` (color only), `box` (border).
+- `<Quiet>text</Quiet>` — paired companion to `<Hi>`. Mutes color and drops opacity so a `<Hi>keyword</Hi>` pops while the surrounding sentence fades. Variants: `muted` (default), `strike` (adds a line-through, for negation context).
 
-Recipe (use the soccer-overlay slide from deck 09 as the reference shape):
+  ```md
+  <p><Quiet>Environmental</Quiet> <Hi>science</Hi> <Quiet>examines…</Quiet></p>
+  ```
+
+- `<DataTable :headers :rows :highlight-row :highlight-col :header-rotate />` — styled table for truth tables and small data grids. The analysis's `**Tables:**` block emits rows as JSON arrays, paste-ready. `header-rotate: 'vertical-up' | 'vertical-down'` rotates the header text 90° — match PPTX `vert=270` / `vert=90` on a co-occurrence matrix's column headers.
+
+  ```md
+  <DataTable :headers="['ice', 'steam', 'water']" :rows="[[1, 0, 1], [0, 1, 1]]" header-rotate="vertical-up" />
+  ```
+
+- `<Cropped src :crop :aspect alt />` — wrapper for PPTX cropped pictures (`✂ crop l=…% t=…% r=…% b=…%`). Pass the four edge insets straight from the analysis; the component handles the scale + offset math, sized to fill its parent (or to the supplied `aspect` if the parent doesn't constrain it). Use this inside `gallery` slots or anywhere a one-line wrapper beats a hand-rolled `.cropped` div + scoped style block.
+
+  ```md
+  <Cropped src="./image6.png" :crop="{ l: 0, t: 22.8, r: 0, b: 25.3 }" :aspect="[224, 175]" alt="Lab thumbnail" />
+  ```
+
+  See the "Cropped pictures" section below for the manual recipe — `<Cropped>` is the wrapper-shorthand for the same math.
+
+- `<AnnotatedImage>` + `<Box>` / `<Label>` / `<Layer>` — overlay primitives for image-substrate slides. See "Annotated images" below.
+
+#### Layout prop reference
+
+A few non-obvious props worth knowing about on the theme layouts:
+
+- `layout: aside`, `asideStyle: 'card'` — wraps the sidebar in a rounded-border container with a subtle tint, matching PPTX-style roundRect callouts. The default `'rail'` is a flush stripe with an accent border.
+- `layout: media`, `captionSide: 'right' | 'left' | 'bottom'` — defaults to `'bottom'` (caption under the frame). Side captions render as a narrow rail beside the frame — match PPTX patterns where a small citation rect sits to the right of the figure rather than beneath it.
+- `layout: outro`, `mark: '?'` — single-character mark behind the closing slide. **Quote the YAML value** when the mark is a YAML reserved indicator (`?`, `:`, `[`, `]`, `{`, `}`, `&`, `*`, `!`, `|`, `>`, `%`, `@`, `` ` ``, `,`, leading `-`). See "Gotcha: YAML reserved characters" below for the full list.
+
+### Annotated images
+
+When a slide has the `🎬 PPTX animation` annotation **and** the underlying content is a photograph (or other raster image) with overlay annotations — bounding-box callouts, stat readouts, labels — the canonical pattern is the `<AnnotatedImage>` component (theme-josh) with image-space child elements: `<Box>`, `<Label>`, `<Layer>`. All positions are in source-pixel space (the deck `w × h` from the analysis header), so values paste straight from `_analysis.md`. HTML `<img>` for every raster layer (PDF-export safe), absolutely-positioned `<div>`s for boxes/labels.
+
+The same component subsumes the layered-image-swap pattern (where one image is the base and others reveal regions on click). When a `🔄 IMAGE-SWAP-REVEAL` annotation lists overlapping picture bboxes, reach for `<AnnotatedImage>` rather than the older `<div class="stage">` recipe — fewer moving parts.
 
 ```md
-<script setup>
-import overlaySpec from './diagrams/<name>.json'
-</script>
+<AnnotatedImage src="./image26.png" :viewbox="[960, 540]" fit="cover">
+  <!-- Layered raster, click-revealed. Coords are source pixels. -->
+  <Layer src="./image9.png" :at="[155, 77.5, 650, 385]" :reveal-at="2" />
 
-<div class="stage">
-  <!-- Always-visible raster: source background. -->
-  <img src="./image26.png" alt="Field" class="bg-base" />
-  <!-- Click-revealed raster: appears at the click PPTX puts it on. -->
-  <img src="./image9.png" alt="Players" class="bg-overlay" v-click="2" />
-  <!-- Diagram for the labeled boxes / connectors / arrows that overlay the photo. -->
-  <Diagram class="callouts" :spec="overlaySpec" />
-</div>
+  <!-- Callout boxes — outline rectangles in source-pixel coords. -->
+  <Box :at="[135.9, 7.4, 127.3, 385.5]" :reveal-at="1" variant="callout" />
+  <Box :at="[410.8, 454.7, 84, 81.5]"   :reveal-at="1" variant="callout" />
+
+  <!-- Labels — text positioned by [x, y] point or sized [x, y, w, h] box. -->
+  <Label :at="[263, 94, 336, 98]" :reveal-at="1" variant="stats">
+    <strong>player</strong><br />number: 3
+  </Label>
+  <Label :at="[499, 439, 336, 98]" :reveal-at="1" variant="stats">
+    <strong>ball</strong><br />…
+  </Label>
+</AnnotatedImage>
 
 <style scoped>
 /* Escape the default layout's padding so the photo is full-bleed. */
 :deep(.slidev-layout.josh-default) { padding: 0; }
 
-.stage {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  background: #000;
+/* Variant theming. Variant name X becomes class `.annotated-box-X`
+   (on Box) or `.annotated-label-X` (on Label). */
+:deep(.annotated-box-callout) { border-color: #fff; border-width: 3px; }
+:deep(.annotated-label-stats) {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  padding: 0.4rem 0.6rem;
+  border-radius: 4px;
 }
-.stage img {
-  position: absolute;
-  object-fit: cover;
-}
-.stage .bg-base   { inset: 0; width: 100%; height: 100%; }
-/* (x, y) (w, h) from the analysis converted to percentages of the deck size. */
-.stage .bg-overlay {
-  left: 16.15%;     /* 155 / 960  */
-  top: 14.35%;      /* 77.5 / 540 */
-  width: 67.71%;    /* 650 / 960  */
-  height: 71.30%;   /* 385 / 540  */
-}
-.stage .callouts {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-.callouts :deep(svg) { position: absolute; inset: 0; width: 100%; height: 100%; }
-/* per-shape theming via .box-<style> selectors */
-.callouts :deep(.box-callout rect) { stroke: #fff; stroke-width: 3; fill: transparent; }
 </style>
 ```
 
-Where the spec file holds only the **overlay shapes** (no `background:` field) with `revealAt` clicks matching the `🎬` annotation's click groups:
+Props:
 
-```jsonc
-{
-  "w": 960, "h": 540,
-  "boxes": [
-    { "id": "player-box", "shape": "roundRect", "x": 135.9, "y": 7.4, "w": 127.3, "h": 385.5, "style": "callout", "revealAt": 1 },
-    { "id": "ball-box",   "shape": "roundRect", "x": 410.8, "y": 454.7, "w": 84.0, "h": 81.5, "style": "callout", "revealAt": 1 },
-    { "id": "player-stats", "x": 263.2, "y": 93.9, "w": 336.1, "h": 97.6, "style": "stats", "revealAt": 1, "lines": ["player", "number: 3", …] },
-    { "id": "ball-stats",   "x": 499.2, "y": 438.7, "w": 336.1, "h": 97.6, "style": "stats", "revealAt": 1, "lines": ["ball", …] }
-  ]
-}
-```
+- `<AnnotatedImage>`: `src` (base image — full-bleed `<img>` inside the wrapper), `viewbox: [w, h]` (source-pixel coord system; defaults to `[960, 540]`), `fit: 'cover' | 'contain'` (base-image fit; default `'cover'`), `layout: 'aspect' | 'container'` (defaults to `'aspect'` — wrapper locks to the viewbox aspect ratio; use `'container'` only when the parent constrains the wrapper to a matching aspect).
+- `<Box>`: `at: [x, y, w, h]` (required, viewbox coords), `revealAt` / `reveal: { from, to, until }` / `hideAt` (same reveal API as `<Diagram>`), `variant: <string>` (becomes `.annotated-box-<variant>`).
+- `<Label>`: `at: [x, y]` (point) or `[x, y, w, h]` (sized), reveal props, `variant`, `align: 'left' | 'center' | 'right'`. Slot accepts any markdown/HTML.
+- `<Layer>`: `src` (image path), `at: [x, y, w, h]` (omit for full-bleed), reveal props, `fit: 'cover' | 'contain'`.
 
-**Don't use the Diagram `background:` / `backgrounds:` field for raster photographs in slides like this.** The SVG `<image>` element renders dim or unevenly in some PDF export pipelines (Playwright + chromium). HTML `<img>` outside the SVG is more robust and inherits Vite's path resolution for free. The `background:` field is fine for diagrams whose only background is a programmatic pattern, a `data:` URI, or for screen-only viewing — but the HTML wrapper pattern above is what we ship.
+**Why `<AnnotatedImage>` over the old `<Diagram>`-with-`stage`-div recipe:**
 
-**Coordinate alignment:** the SVG and the `<img>` elements live in the same DOM box (`.stage`, which is the slide's content area). The Diagram's viewBox is `w × h` from the spec (deck size). The `<img>` positioning uses percentages of the same box, computed from the source coords in the analysis. They line up byte-for-byte if you do the math right.
+- Inline in markdown — no separate JSON spec file for a one-off overlay.
+- Coords stay in source-pixel space — no `100 / (100 - l - r)` percent conversions to fish for the right number.
+- PDF-safe by default — HTML `<img>` for all rasters; the SVG `<image>` element issue doesn't apply.
+- Subsumes the swap-stack: `<AnnotatedImage>` with N `<Layer :reveal-at>` children IS the swap-stack pattern, expressed declaratively.
 
-**Click ordering:** the `🎬` annotation lists user-clicks in source order. PPTX `clickEffect` starts a new user click; `afterEffect`/`withEffect` join the previous click (no extra user input). The annotation already shows them as `click 1:`, `click 2:` — copy those indices straight into `revealAt` / `v-click`.
+`<Diagram>` stays the right tool for graph-shaped diagrams with snap-routed connectors; `<AnnotatedImage>` handles "image is the substrate, shapes sit on top."
+
+**Click ordering:** the `🎬` annotation lists user-clicks in source order. PPTX `clickEffect` starts a new user click; `afterEffect`/`withEffect` join the previous click (no extra user input). The annotation already shows them as `click 1:`, `click 2:` — copy those indices straight into `reveal-at` / `v-click`.
 
 ### When to use Mermaid instead
 
@@ -678,7 +409,16 @@ Default to `<Diagram :spec="…" />` and you'll never hit this.
 
 ### Gotcha: YAML reserved characters in frontmatter values
 
-Slide frontmatter is YAML, so layout props that look like single punctuation marks need quoting or they get reinterpreted. The one that bites in this repo is the `outro` layout's `mark` prop: `mark: ?` parses as a complex-mapping-key indicator and arrives at the component as `undefined` (the layout silently falls back to its default `?`). Write `mark: '?'` instead.
+Slide frontmatter is YAML, so layout props that look like single punctuation marks need quoting or they get reinterpreted. The one that bites in this repo is the `outro` layout's `mark` prop: `mark: ?` parses as a complex-mapping-key indicator and arrives at the component as `undefined` (the layout silently falls back to its default `?`).
+
+Always quote the mark:
+
+```yaml
+---
+layout: outro
+mark: '?'      # ← quoted. Plain `mark: ?` is a YAML parse-error / undefined.
+---
+```
 
 Same applies to any value that starts with one of YAML's flow indicators: `?`, `:`, `,`, `[`, `]`, `{`, `}`, `&`, `*`, `!`, `|`, `>`, `%`, `@`, `` ` ``, or a leading `-`. When in doubt, quote.
 
@@ -692,7 +432,17 @@ Slidev's build will fail with `Import "/foo.png" from slide Markdown resolves ou
 
 PPTX stores image crops as four edge insets (`<a:srcRect l="..." t="..." r="..." b="...">`, in 1/1000ths of a percent) — the source image is the full `image*.png` extracted from the deck, but only a subset is visible inside the picture's bbox. **The prep script extracts the full image; the crop is applied only at render time.** If you drop the raw `<img src="./image*.png" />` onto the slide, you'll show the whole thing instead of the framed portion the author chose.
 
-When a picture is cropped, the analysis flags it with `✂ crop l=…% t=…% r=…% b=…%` and prints four ready-to-paste CSS percentages — `width`, `height`, `left`, `top` — already computed against the wrapper. Plug them into a wrapper that's sized to the bbox and clips overflow:
+When a picture is cropped, the analysis flags it with `✂ crop l=…% t=…% r=…% b=…%` and prints four ready-to-paste CSS percentages — `width`, `height`, `left`, `top` — already computed against the wrapper.
+
+**Shorthand:** the theme-josh `<Cropped>` component encapsulates the wrapper + scale math. Pass the four edge insets straight from the analysis, optionally with the bbox aspect:
+
+```md
+<Cropped src="./image3.png" :crop="{ l: 0, t: 22.8, r: 0, b: 25.3 }" :aspect="[224, 175]" alt="…" />
+```
+
+`<Cropped>` fills its parent — handy in gallery cells (no extra plumbing) and in `media`'s `::media::` slot. Pass `:aspect="[w, h]"` when the parent doesn't constrain height.
+
+**Manual recipe** (when you need to customize the wrapper further):
 
 ```md
 <div class="cropped">
