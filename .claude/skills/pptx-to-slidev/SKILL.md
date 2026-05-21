@@ -53,9 +53,11 @@ If thumbnails aren't present (local PPTX with no Slides URL, or `--no-thumbnails
 2. Scan for **adjacent slides with overlapping content** — these are nearly always build-up animations (progressive bullets, diagram states, highlight passes). Plan to collapse them into a single Slidev slide with click reveals.
 3. Decide each slide's Slidev layout (see table below).
 4. Replace the template's placeholder `slides.md` with your converted deck.
-5. Verify the build: `cd <talk-dir> && npm install && npx slidev build`. If it succeeds, `rm -rf dist/`. If it fails, read the error, fix, rebuild.
-6. **Then verify in dev.** Run `npm run dev`, click through every slide, and check for Vite error overlays. Build success ≠ slides render correctly — Vite's dev import-analysis has different relative-path rules than the production bundler, so a slide that compiles cleanly under `npx slidev build` can show an error overlay (or, worse, silently drop the diagram) under `npm run dev`. The common offender is relative JSON imports from `<script setup>` — see "Recreating diagrams" for the `import.meta.glob` workaround.
-7. Delete `_analysis.json` and `_analysis.md`.
+5. **Verify the build + render in one call:** `.claude/scripts/verify-talk.sh <talk-dir>`. The script runs `npm install` (if needed), `npx slidev build`, starts `npm run dev`, headless-screenshots every slide into `<talk-dir>/_shots/slide-N.png`, and stops the dev server. If build fails, it prints the tail of the build log and exits non-zero. Read the resulting PNGs with the `Read` tool to catch layout regressions that `npx slidev build` won't surface (Vite import-analysis differences, layouts that overflow the 16:9 box and trigger slidev's auto-scale-down, scoped-CSS clashes, missing fonts, etc.). The common offender is relative JSON imports from `<script setup>` — see "Recreating diagrams" for the `import.meta.glob` workaround.
+
+   Useful flags: `--shots 1,3,5-7` for a subset, `--shots none` to skip screenshots (build-only), `--port N` if 3030 is taken (auto-fallback to next free port if not specified).
+
+6. **Clean up:** `.claude/scripts/cleanup-talk.sh <talk-dir>`. Removes `_analysis.json`, `_analysis.md`, `_thumbnails/`, `_shots/`, and `dist/` in one shot.
 
 ### Mapping slide kinds to Slidev layouts
 
@@ -585,5 +587,5 @@ If the user only has a PPTX (no Slides URL / no sidecar), the original video is 
 - **Visual fidelity is not the goal.** Structural clarity and themeability are. If the source uses six fonts and four highlight colors, your conversion uses one font and `currentColor`.
 - The script does **not** overwrite existing dirs. If a previous conversion lives there, ask the user before removing it.
 - Speaker notes in Google-Slides-exported PPTX are usually empty placeholders. The script filters out the slide-number marker, so anything that shows up in the "Notes" section of the analysis is real content worth keeping (translate to Slidev's `<!-- ... -->` comment block under the slide, which becomes presenter notes).
-- After verifying the build, delete `dist/` and the `_analysis.*` files so the talk dir stays clean.
+- After verifying the build, run `.claude/scripts/cleanup-talk.sh <talk-dir>` to remove `_analysis.*`, `_thumbnails/`, `_shots/`, and `dist/` in one shot — keeps the talk dir clean.
 - If the source deck used SmartArt or other Google-rendered shapes, Google often rasterizes them to images on PPTX export. You'll see them as picture elements rather than shape lists — that's expected; just place the image.
