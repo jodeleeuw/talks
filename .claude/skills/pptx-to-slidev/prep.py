@@ -143,6 +143,16 @@ def get_xfrm(elem):
     ext = xfrm.find("a:ext", NS)
     if off is None or ext is None:
         return None
+    # `rot` is in 60000ths of a degree; normalize to a float in (-360, 360].
+    # Used downstream to surface picture/shape rotation as a Sticker `:rotate`
+    # hint and as a `rot=N°` annotation in the analysis.
+    rot_raw = xfrm.attrib.get("rot")
+    rot_deg = None
+    if rot_raw:
+        try:
+            rot_deg = round(int(rot_raw) / 60000, 2)
+        except ValueError:
+            rot_deg = None
     return {
         "x": emu_to_px(off.attrib.get("x", 0)),
         "y": emu_to_px(off.attrib.get("y", 0)),
@@ -150,6 +160,7 @@ def get_xfrm(elem):
         "h": emu_to_px(ext.attrib.get("cy", 0)),
         "flipH": xfrm.attrib.get("flipH") == "1",
         "flipV": xfrm.attrib.get("flipV") == "1",
+        "rot": rot_deg,
     }
 
 
@@ -2103,7 +2114,7 @@ def write_summary(path, analysis):
                 w = round((bb.get("w") or 0) * slidev_w / deck_w)
                 h = round((bb.get("h") or 0) * slidev_h / deck_h)
                 return f"{x},{y},{w},{h}"
-            placed = []  # (sticker_id, pos_str, file) for pics worth dragging
+            placed = []  # (sticker_id, pos_str, file, props_dict, crop_dict) for pics worth dragging
             for i, pic in enumerate(pics):
                 if id(pic) in sliver_ids:
                     continue
@@ -2112,11 +2123,23 @@ def write_summary(path, analysis):
                     "  ⚠ **video placeholder** — skip this picture and embed the matching video below instead"
                     if pic.get("video_placeholder") else ""
                 )
+                # Transform tags surface PPTX `flipH` / `flipV` / `rot` on the
+                # picture line so the author can mirror/tilt the sticker in the
+                # generated markdown — these aren't deducible from coords alone
+                # and used to silently get dropped on the way to Slidev.
+                xforms = []
+                if bb.get("flipH"):
+                    xforms.append("flipH")
+                if bb.get("flipV"):
+                    xforms.append("flipV")
+                if bb.get("rot"):
+                    xforms.append(f"rot={bb['rot']}°")
+                xform_tag = f"  ⤿ {', '.join(xforms)}" if xforms else ""
                 pos_str = _slidev_pos(bb)
                 L.append(
                     f"- `{pic.get('file', '?')}` at ({bb.get('x')}, {bb.get('y')}) "
                     f"size {bb.get('w')}×{bb.get('h')} → slidev pos `{pos_str}`"
-                    f"{placeholder_tag}"
+                    f"{xform_tag}{placeholder_tag}"
                 )
                 crop = pic.get("crop")
                 if crop:
@@ -2130,13 +2153,25 @@ def write_summary(path, analysis):
                         f"`img {{ width: {crop['img_width_pct']}%; height: {crop['img_height_pct']}%; "
                         f"left: {crop['img_left_pct']}%; top: {crop['img_top_pct']}%; }}`"
                     )
-                if not pic.get("video_placeholder") and not crop:
-                    placed.append((f"pic-{i}", pos_str, pic.get("file") or "?"))
-            # If a slide has 3+ free-floating pictures at irregular positions
+                if not pic.get("video_placeholder"):
+                    props = {}
+                    if bb.get("flipH"):
+                        props["flipH"] = True
+                    if bb.get("flipV"):
+                        props["flipV"] = True
+                    if bb.get("rot"):
+                        props["rotate"] = bb["rot"]
+                    placed.append((f"pic-{i}", pos_str, pic.get("file") or "?", props, crop))
+            # If a slide has 2+ free-floating pictures at irregular positions
             # (not a 2-col, not a gallery grid), it's a `<Sticker>` candidate.
-            # Emit a ready-to-paste `dragPos:` block + Sticker tags so the
-            # author can drop them in and refine with the Slidev drag editor.
-            if len(placed) >= 3 and not s.get("image_swap") and not s.get("highlight_reveal"):
+            # Threshold is intentionally low — 2 stickers + a few overlay shapes
+            # (e.g. a meme caption over an article + reaction photo, or two
+            # facing heads with a thought bubble) is the unusual-layout pattern
+            # that Sticker + inline SVG handles better than a thumbnail fallback.
+            # Cropped pictures count: they wrap in `<Cropped>` inside `<v-drag>`
+            # rather than `<Sticker>` (Sticker doesn't crop), so the emitted
+            # block uses raw v-drag for those.
+            if len(placed) >= 2 and not s.get("image_swap") and not s.get("highlight_reveal"):
                 s["sticker_candidate"] = len(placed)
                 L.append("")
                 L.append(
@@ -2146,18 +2181,36 @@ def write_summary(path, analysis):
                     f"into slide frontmatter and the tags into the body. Then "
                     f"`npm run dev` and **double-click any sticker** to drag / "
                     f"resize / rotate in place — the editor writes positions back "
-                    f"to the `dragPos:` block."
+                    f"to the `dragPos:` block. Prefer this over `layout: image` + "
+                    f"a thumbnail when the slide also has decorative chrome (cloud "
+                    f"callouts, freeform paths) you can draw with inline SVG."
                 )
                 L.append("")
                 L.append("```yaml")
                 L.append("dragPos:")
-                for sid, pos_str, _f in placed:
+                for sid, pos_str, _f, _props, _crop in placed:
                     L.append(f'  {sid}: "{pos_str}"')
                 L.append("```")
                 L.append("")
                 L.append("```html")
-                for sid, _pos, f in placed:
-                    L.append(f'<Sticker id="{sid}" src="./{f}" />')
+                for sid, _pos, f, props, crop in placed:
+                    if crop:
+                        c = crop
+                        L.append(
+                            f'<v-drag pos="{sid}">\n'
+                            f'  <Cropped src="./{f}" :crop="{{ l: {c["l"]}, t: {c["t"]}, '
+                            f'r: {c["r"]}, b: {c["b"]} }}" />\n'
+                            f'</v-drag>'
+                        )
+                    else:
+                        attrs = []
+                        for k, v in props.items():
+                            if v is True:
+                                attrs.append(k)
+                            else:
+                                attrs.append(f':{k}="{v}"')
+                        attrs_str = (" " + " ".join(attrs)) if attrs else ""
+                        L.append(f'<Sticker id="{sid}" src="./{f}"{attrs_str} />')
                 L.append("```")
             for fname, slivers in sliver_groups.items():
                 L.append(
@@ -2304,57 +2357,6 @@ def write_summary(path, analysis):
         f.write("\n".join(final))
 
 
-def _adjust_template_paths(dest_dir, repo):
-    """Rewrite `_shared/`-relative paths in the copied template for the
-    destination's actual depth from the repo root.
-
-    The template's `components/Diagram.vue` and `vite.config.ts` assume the
-    talk dir sits one level below the repo root (`<repo>/<talk>/`). When a
-    talk gets scaffolded somewhere deeper (e.g. `<repo>/tmp_talks/<talk>/`),
-    `../../_shared/...` no longer resolves — we patch the references so they
-    reach the actual `_shared/` location.
-    """
-    rel = os.path.relpath(dest_dir, repo)
-    depth = len([p for p in rel.split(os.sep) if p and p != "."])
-    if depth <= 1:
-        return  # template was written for depth=1; nothing to adjust
-
-    # components/Diagram.vue lives one level deeper than the talk dir, so the
-    # import string needs (depth + 1) "../" segments to reach the repo root.
-    diagram_vue = os.path.join(dest_dir, "components", "Diagram.vue")
-    if os.path.isfile(diagram_vue):
-        with open(diagram_vue) as f:
-            content = f.read()
-        new_rel = "/".join([".."] * (depth + 1)) + "/_shared/diagram/Diagram.vue"
-        content = content.replace("../../_shared/diagram/Diagram.vue", new_rel)
-        with open(diagram_vue, "w") as f:
-            f.write(content)
-
-    # vite.config.ts uses resolve(__dirname, '..') — needs `depth` "..` parts.
-    vite_cfg = os.path.join(dest_dir, "vite.config.ts")
-    if os.path.isfile(vite_cfg):
-        with open(vite_cfg) as f:
-            content = f.read()
-        dots = ", ".join(["'..'"] * depth)
-        content = content.replace("resolve(__dirname, '..')", f"resolve(__dirname, {dots})")
-        with open(vite_cfg, "w") as f:
-            f.write(content)
-
-    # slides.md headmatter declares `theme: ../_shared/theme-josh` (depth=1).
-    # Bump the prefix to match this deck's depth.
-    slides_md = os.path.join(dest_dir, "slides.md")
-    if os.path.isfile(slides_md):
-        with open(slides_md) as f:
-            content = f.read()
-        new_prefix = "/".join([".."] * depth)
-        content = content.replace(
-            "theme: ../_shared/theme-josh",
-            f"theme: {new_prefix}/_shared/theme-josh",
-        )
-        with open(slides_md, "w") as f:
-            f.write(content)
-
-
 def main():
     ap = argparse.ArgumentParser(description="Prep a PPTX for Slidev conversion.")
     ap.add_argument("pptx", help="Path to the .pptx file")
@@ -2392,7 +2394,6 @@ def main():
             "node_modules", "dist", ".DS_Store", "package-lock.json",
         ),
     )
-    _adjust_template_paths(dest_dir, repo)
 
     with zipfile.ZipFile(pptx_path) as zf:
         deck_w, deck_h = get_deck_size(parse_xml(zf, "ppt/presentation.xml"))

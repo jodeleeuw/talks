@@ -1,5 +1,5 @@
 ---
-theme: ../_shared/theme-josh
+theme: fenbrook
 title: My Talk
 info: |
   ## My Talk

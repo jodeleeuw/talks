@@ -3,7 +3,15 @@ Talks, lecture slides, etc.
 
 ## Creating a new talk
 
-Each talk lives in its own directory. To start a new one, copy the `template/` directory and rename it:
+Each talk lives in its own directory. Run the scaffolder from the repo root:
+
+```bash
+npm run new
+```
+
+It prompts for a parent folder (repo root, `workshops/`, `tmp_talks/`, or a new one), then a name. It copies `template/`, runs `npm install`, opens the folder in VS Code (if `code` is on `PATH`), and starts the dev server.
+
+To do it by hand instead:
 
 ```bash
 cp -r template/ my-talk-name

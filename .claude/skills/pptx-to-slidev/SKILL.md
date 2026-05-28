@@ -35,7 +35,7 @@ After the script runs, **read `_analysis.md`** end-to-end **and read the per-sli
 
 The file opens with a `## Contents` table-of-contents — one line per slide with the slide's title (or first paragraph) and any annotation icons it has (`🪄`, `🎬×N`, `🔄`, `🔁`, `⚠`, `⛔`, `⛔text-swap`, `💡<dir>`, `🪧`). Scan the TOC first to spot the high-signal slides; then read those slides' detail blocks. Also: when a slide's shape geometry is identical to the previous slide's, the `**Shapes (px in deck coords):**` block elides with `_(identical to slide N)_` rather than repeating — the diff block above carries the per-transition signal.
 
-The `vite.config.ts` extends Vite's `server.fs.allow` to include the repo root so the deck can import the shared `_shared/diagram/Diagram.vue`. The `components/Diagram.vue` wrapper auto-registers `<Diagram>` globally for every slide via Slidev's `components/` auto-import.
+The deck's `package.json` pins `slidev-theme-fenbrook` from GitHub, and `slides.md` headmatter selects it via `theme: fenbrook`. The theme provides `<Diagram>` and all the other components (`<Hi>`, `<DataTable>`, `<Cropped>`, `<Sticker>`, `<AnnotatedImage>`, …) as globally-registered components — no wrapper file, no `vite.config.ts`, no relative paths.
 
 ### Source thumbnails
 
@@ -67,13 +67,13 @@ If thumbnails aren't present (local PPTX with no Slides URL, or `--no-thumbnails
 | Pull-quote with attribution | `quote` |
 | Blank slide acting as a divider | `section` |
 | Single centered headline / call-to-action | `center` |
-| Image + text side-by-side | `media` (theme-josh) — `side: left|right`, optional `caption` |
-| 2–6 images in a grid / mosaic | `gallery` (theme-josh) — named slots `::a::`–`::f::`, optional `::overlay::` for a centered card |
-| Full-bleed background image with overlaid text | `image-bg` (theme-josh) — props `image`, `align`, `darken`, `position`, `tint`. **For photographs only** — never for data viz / charts (the overlay text lands on top of the chart). |
-| Title pinned at top + tall content (table, chart, big diagram) | `panel` (theme-josh) — props `align: 'left' \| 'center'`, `gap`. Use whenever `default`'s vertical-centering would push the H1 off-screen. |
-| Naked source thumbnail (hand-drawn figure, freeform diagram) | `image` (theme-josh) — props `image`, optional `caption`, `captionPosition: 'top' \| 'bottom'`. The caption gets a scrim background so it stays readable over any image edge. |
+| Image + text side-by-side | `media` (fenbrook) — `side: left|right`, optional `caption` |
+| 2–6 images in a grid / mosaic | `gallery` (fenbrook) — named slots `::a::`–`::f::`, optional `::overlay::` for a centered card |
+| Full-bleed background image with overlaid text | `image-bg` (fenbrook) — props `image`, `align`, `darken`, `position`, `tint`. **For photographs only** — never for data viz / charts (the overlay text lands on top of the chart). |
+| Title pinned at top + tall content (table, chart, big diagram) | `panel` (fenbrook) — props `align: 'left' \| 'center'`, `gap`. Use whenever `default`'s vertical-centering would push the H1 off-screen. |
+| Naked source thumbnail (hand-drawn figure, freeform diagram) | `image` (fenbrook) — props `image`, optional `caption`, `captionPosition: 'top' \| 'bottom'`. The caption gets a scrim background so it stays readable over any image edge. |
 | Truth table / small data grid | `panel` + `<DataTable :headers :rows :highlight-row :highlight-col />` (so the H1 stays anchored above the table) |
-| Closing slide ("thanks", "questions") | `end` or `outro` (theme-josh) |
+| Closing slide ("thanks", "questions") | `end` or `outro` (fenbrook) |
 | Ordinary content slide | (no layout — use the default) |
 
 These are starting points, not rules. Pick whatever reads best. The `gallery`, `image-bg`, `media`, and `outro` layouts auto-hide the footer (see `global-top.vue`'s `HIDE_ON` set), so don't pile `footer: false` on top.
@@ -190,7 +190,7 @@ Wrong (one click per element — invents structure that wasn't in the source):
 
 ### Recreating diagrams (shapes + connectors)
 
-When the analysis lists multiple shapes and connectors with positions, the slide is a diagram. **Default to the `<Diagram>` component** (auto-imported via `components/Diagram.vue`, backed by `_shared/diagram/Diagram.vue`). Write the geometry as a JSON spec file in the deck's `diagrams/` directory and reference it.
+When the analysis lists multiple shapes and connectors with positions, the slide is a diagram. **Default to the `<Diagram>` component** (auto-registered globally by `slidev-theme-fenbrook`). Write the geometry as a JSON spec file in the deck's `diagrams/` directory and reference it.
 
 #### Workflow per diagram slide
 
@@ -222,7 +222,7 @@ const spec = _specs['./diagrams/my-diagram.json']
 
 #### Full spec reference
 
-The `<Diagram>` API — every prop, every spec field, snap/route/outset syntax, reveal semantics, theming hooks — lives in [`_shared/diagram/SPEC.md`](../../../_shared/diagram/SPEC.md). **Read it once before writing your first spec.** This skill only covers the PPTX → spec translation; everything else is in SPEC.md.
+The `<Diagram>` API — every prop, every spec field, snap/route/outset syntax, reveal semantics, theming hooks — lives in [`docs/DIAGRAM.md` in the theme repo](https://github.com/jodeleeuw/slidev-theme-fenbrook/blob/main/docs/DIAGRAM.md). **Read it once before writing your first spec.** This skill only covers the PPTX → spec translation; everything else is in that doc.
 
 #### Mapping prep.py annotations to spec fields
 
@@ -246,9 +246,9 @@ What the analysis surfaces and where it lands in the spec:
 
 The `background` field is also fine for programmatic patterns, `data:` URIs, or live-only viewing.
 
-#### When to give up on `<Diagram>` (and just use the source PNG)
+#### When to give up on `<Diagram>` (and reach for stickers, inline SVG, or — last resort — the thumbnail)
 
-The component is great for **graph-shaped** diagrams: 5–15 labeled boxes connected by snap-routed arrows, where the spatial arrangement matters but the visual style doesn't. It's *not* the right tool for everything in the deck. Bail and use the source PNG as an `<img>` when:
+The component is great for **graph-shaped** diagrams: 5–15 labeled boxes connected by snap-routed arrows, where the spatial arrangement matters but the visual style doesn't. It's *not* the right tool for everything in the deck. Bail when:
 
 - The slide is flagged with the `🪄 Freeform/dense figure` annotation — prep.py already decided this isn't graph-shaped, take the hint.
 - The diagram has **more than ~15 shapes** and you're scaffolding from scratch — the JSON authoring cost dominates.
@@ -256,8 +256,44 @@ The component is great for **graph-shaped** diagrams: 5–15 labeled boxes conne
 - The source is **rasterized SmartArt / Visio / clipart** that came across as one `image*.png`. Don't try to reverse-engineer it; just place the image.
 - The diagram has **mixed-formatting or rich text inside boxes** (bold + color within one label, equations, code) that won't survive the `<text>` element.
 - The shapes are **non-rectangular** (organic curves, polygons, freeform) and `shape: "ellipse"` isn't enough.
+- The slide has **non-graph PPTX shapes** (`cloudCallout`, `wedgeRectCallout`, freeform `<a:custGeom>`, hearts, suns, banners) — `<Diagram>` only supports rect / roundRect / ellipse / arrow.
 
-**Preferred fallback: use the source thumbnail.** Every slide has a PNG in `_thumbnails/slide-N.png` (when `google-slides-export` produced them). For a "just show the diagram" slide:
+**Preferred fallback: `<Sticker>` + inline SVG for any decorative chrome.** Most "unusual layout" slides are some combination of:
+
+1. A few free-floating images at specific positions (sticker territory)
+2. One or two decorative PPTX shapes you can't recreate in `<Diagram>` (cloud bubble, custom callout) — draw these inline with a small `<svg>` block
+3. A text overlay or caption (positioned via `<v-drag>` or absolute CSS)
+
+This composes cleanly and keeps theme typography. The two-facing-heads-with-a-thought-bubble pattern is the canonical case: two `<Sticker>`s (one with `flipH`), an inline `<svg>` cloud, and the question text — all positioned via a single `dragPos:` frontmatter block. Drag-edit in `npm run dev` to fine-tune. See "Free-floating images / `<Sticker>`" below.
+
+```md
+---
+footer: false
+dragPos:
+  head-left:  "16,16,374,518"
+  head-right: "597,16,374,518"
+  bubble:     "353,0,311,245"
+  question:   "300,330,400,160"
+---
+
+<Sticker id="head-left"  src="./image10.png" />
+<Sticker id="head-right" src="./image10.png" flipH />
+
+<v-drag pos="bubble">
+  <svg viewBox="0 0 311 245" preserveAspectRatio="none">
+    <path d="M 70 165 Q 30 165 30 125 …" fill="#fff" stroke="#222" stroke-width="2" />
+  </svg>
+</v-drag>
+
+<v-drag pos="question">
+  <p>Or do we use concepts like <em>belief</em> and <em>desire</em> to make sense of behavior?</p>
+</v-drag>
+```
+
+**Fallback of last resort: the source thumbnail.** Every slide has a PNG in `_thumbnails/slide-N.png` (when `google-slides-export` produced them). Use it only when:
+
+- The slide is flagged `🪄 Freeform/dense figure` (a hand-drawn figure that's not worth reconstructing), or
+- The composition is genuinely too fiddly to recreate (dozens of stickers, complex custom paths, baked-in shading).
 
 ```md
 ---
@@ -267,11 +303,7 @@ caption: "Tic-tac-toe as a symbol system: board state plus a set of legal action
 ---
 ```
 
-(`caption` and `captionPosition: 'top' | 'bottom'` are optional; the caption gets a scrim background so it stays readable over any image edge.)
-
-Caveat: thumbnails are 1600×900 PNGs that bake in the source theme — fine for content slides but won't match your Slidev theme. So use the thumbnail when fidelity matters more than theming. For diagrams you *want* themed, do the `<Diagram>` work.
-
-**Secondary fallback: inline SVG / HTML.** Drop into raw markup when you need partial-Diagram + something exotic (tweened motion, gradients, multi-line foreignObject text). Most cases get covered by Diagram + thumbnails + image layouts; inline SVG is rare.
+Thumbnails are 1600×900 PNGs that bake in the source theme — typography won't match Slidev, you can't reposition pieces, and the file has to be moved out of `_thumbnails/` before cleanup (since the cleanup script wipes that directory). Default to stickers + inline SVG; reach for thumbnails only after that's been ruled out.
 
 #### Known `<Diagram>` limitations
 
@@ -287,7 +319,7 @@ Beyond the geometry/text dump and diff blocks, `_analysis.md` emits a few semant
 
 - `**Tables:**` (per slide) — PPTX tables (`<a:tbl>`) extracted with cell contents. Convert with the theme's `<DataTable :headers="..." :rows="...">` component (or a raw markdown table). The script prints rows as JSON arrays so they're paste-ready. Header detection prefers PPTX's `<a:tblPr firstRow="1">`, then `<a:tr h="1">`, then "all-bold first row"; when nothing matches it emits `Headers: null` and puts every row in `Rows`.
 - ` vert=270` / `vert=90` / `vert=stacked` on a shape line — the shape's text is rotated. Map directly to `textRotate: "vertical-up"` (270) / `"vertical-down"` (90) on a `<Diagram>` box, or wrap with `transform: rotate(...)` in raw HTML. Picked up from `<a:bodyPr vert="...">` *or* `<a:xfrm rot="...">` (PPTX uses both).
-- ` 🎨 full-slide overlay (likely a darken scrim over a background picture)` — a slide-sized opaque rect at (0,0), low luminance. **Don't render this as a content shape.** It's a darkening scrim over a background photo; treat the picture beneath as a background and put the overlay in CSS (a `linear-gradient` over the image, or `theme-josh`'s `image-bg` layout with `darken: 0.6`).
+- ` 🎨 full-slide overlay (likely a darken scrim over a background picture)` — a slide-sized opaque rect at (0,0), low luminance. **Don't render this as a content shape.** It's a darkening scrim over a background photo; treat the picture beneath as a background and put the overlay in CSS (a `linear-gradient` over the image, or `fenbrook`'s `image-bg` layout with `darken: 0.6`).
 - ` ✂ crop l=…% t=…% r=…% b=…%` on a picture — the source image is wider/taller than the bbox; only the visible portion shows. See "Cropped pictures" below for the wrapper recipe.
 - ` ⚠ video placeholder` on a picture — the source had an embedded video; Google's PPTX export replaced it with a thumbnail. The `<deck>.videos.json` sidecar has the original URL/embed metadata. See "Videos" below.
 - `🔄 IMAGE-SWAP-REVEAL` (slide annotation) — adjacent slides where the pictures change AND at least one collapse signal is present: a shared heading/text, overlapping picture bboxes (layered swap, not alternatives), or constant non-picture overlay shapes (callouts annotating a changing photo). The annotation lists which signals fired. Collapse into one Slidev slide — `<AnnotatedImage>` is the recommended primitive (see "Annotated images" below).
@@ -300,7 +332,8 @@ Beyond the geometry/text dump and diff blocks, `_analysis.md` emits a few semant
 - `🪄 Freeform/dense figure (N shapes, M with no text)` (slide annotation, near the top) — the slide is a hand-drawn drawing, freeform diagram, or decorative mesh (X/O on a board, network spaghetti). Trying to recreate this in `<Diagram>` is wasted effort — use `layout: image` with the source thumbnail. The accompanying suggestion in the annotation gives you the exact `<img>` path. Triggers when there are ≥ 12 positioned shapes, ≥ 55% have no text, AND there are ≥ 12 empty shapes in absolute terms (gates out perceptron-style schematics that hit the ratio early in their build). A second-stage check disables the flag when the empty shapes look like the unlabeled member of a labeled-grid pair (≥ 80% share an X coordinate, or each has a non-empty sibling within `2 × shape_width` horizontally) — those are tractable in `<Diagram>` as two-column layouts.
 - `⛔ scene change` (diff-block header swap) — replaces the usual "treat the whole block as one click" hint. Fires on either of: (a) ≥ 70% of a 5+ shape prior is wiped + at least one new shape added, or (b) 100% of the prior's shapes are removed regardless of count (catches title → body transitions that path (a)'s 5-shape gate misses). **Do not** wrap the affected slides as `v-click` reveals; author them as separate Slidev slides.
 - `⛔ text-swap scene change` (diff-block header swap) — every shape stayed put but the *only* change is a text replacement on a single shape, and the new text shares no word tokens with the old (Jaccard ≤ 0.15). The "stable banner with rotating content" pattern, where the source author rotated unrelated content through one persistent text frame. Treat as a fresh slide, not a click-driven swap.
-- `🪧 Sticker candidate (N free-floating pictures)` (slide annotation, under the `**Pictures:**` block) — the slide has 3+ free-floating images and no grid/swap signal. The block prints (a) a `dragPos:` YAML snippet to paste into the slide's frontmatter and (b) one `<Sticker id="pic-K" src="./imageN.png" />` line per picture to paste into the body. Initial positions are computed from PPTX coordinates (Slidev's default 980-wide 16:9 canvas). After pasting, `npm run dev` and **double-click any sticker** to drag / resize / rotate in place — the editor writes new positions back to the `dragPos:` block. See "Free-floating images / `<Sticker>`" below. **Skip the Sticker block** if the picture set is actually a grid (use `gallery`), a single dominant figure (`media` / `image`), or an annotation overlay on one base image (`<AnnotatedImage>`).
+- `🪧 Sticker candidate (N free-floating pictures)` (slide annotation, under the `**Pictures:**` block) — the slide has **2+** free-floating images and no grid/swap signal. The block prints (a) a `dragPos:` YAML snippet to paste into the slide's frontmatter and (b) one `<Sticker>` or `<v-drag>+<Cropped>` line per picture, with `flipH` / `flipV` / `:rotate` props pre-filled from any PPTX transforms. Initial positions are computed from PPTX coordinates (Slidev's default 980-wide 16:9 canvas). After pasting, `npm run dev` and **double-click any sticker** to drag / resize / rotate in place — the editor writes new positions back to the `dragPos:` block. See "Free-floating images / `<Sticker>`" below. The annotation fires at the lower 2-picture threshold deliberately — meme-style "article + reaction photo + caption" slides and "two facing heads + thought bubble" slides both compose better with stickers + inline SVG than with `layout: image` + a baked thumbnail. **Skip the Sticker block** if the picture set is actually a grid (use `gallery`), a single dominant figure (`media` / `image`), or an annotation overlay on one base image (`<AnnotatedImage>`).
+- ` ⤿ flipH` / ` ⤿ flipV` / ` ⤿ rot=N°` on a picture line — the source PPTX has `<a:xfrm flipH="1">`, `flipV="1"`, or `rot="…"` on this picture. These don't show up in the coords, so they used to silently get lost. Map straight to `<Sticker flipH>`, `<Sticker flipV>`, or `<Sticker :rotate="N">`. The Sticker block in a `🪧 Sticker candidate` annotation already inlines these props for you.
 - `decorative slivers (cropped views of the same image, likely a parallax/stripe overlay; not load-bearing)` — surfaced both in the per-slide `**Pictures:**` block and inside `added pictures` / `removed pictures` diff entries. Means the source author tiled many thin cropped strips of a single image as background decor. Skip them entirely — render the un-cropped image as the slide background (e.g. via `layout: image-bg`) and ignore the slivers. The diff block's count in the `(N)` header stays accurate (semantic content unchanged); only the per-entry rendering collapses.
 
 **Multi-paragraph shape text.** When a shape has more than one paragraph, the per-slide listing emits a fenced block under the geometry line (not the inline `text='...'` form). Diff blocks still join with ` | ` because they need to be compact. Either way: one paragraph = one `<p>` (or one `lines[]` entry) when you author the slide.
@@ -309,9 +342,9 @@ Beyond the geometry/text dump and diff blocks, `_analysis.md` emits a few semant
 
 **Run-format tags.** Inside the per-paragraph breakdown, runs are tagged like `` [default] `` / `` [b+#FF0000] `` / `` [is] `` / `` [u] `` where letters mean: `b` bold, `i` italic, `s` strikethrough, `u` underline. They collapse into one token (`[bs]` = bold + strike) and a `+#RRGGBB` color suffix follows when present. Strike and underline pass through to your slide via GFM (`~~text~~` for strike) or inline CSS — no special component needed.
 
-### Inline theme-josh components
+### Inline fenbrook components
 
-Beyond `<Diagram>`, the `theme-josh` theme ships a handful of inline components that auto-register on every slide.
+Beyond `<Diagram>`, the `fenbrook` theme ships a handful of inline components that auto-register on every slide.
 
 - `<Hi>text</Hi>` — keyword highlight. Variants: `marker` (default; underlay), `solid` (color only), `box` (border).
 - `<Quiet>text</Quiet>` — paired companion to `<Hi>`. Mutes color and drops opacity so a `<Hi>keyword</Hi>` pops while the surrounding sentence fades. Variants: `muted` (default), `strike` (adds a line-through, for negation context).
@@ -338,7 +371,7 @@ Beyond `<Diagram>`, the `theme-josh` theme ships a handful of inline components 
 
 - `<AnnotatedImage>` + `<Box>` / `<Label>` / `<Layer>` — overlay primitives for image-substrate slides. See "Annotated images" below.
 
-- `<Sticker id src :frame :rotate :w :h alt />` — drag-positioned floating image. Pair with a `dragPos:` block in slide frontmatter (the prep script emits a ready-to-paste one when it sees the `🪧 Sticker candidate` pattern). `npm run dev` → double-click to drag/resize/rotate; positions write back to `dragPos[id]`. `frame: 'polaroid' | 'shadow'` for decorative chrome. `:w`/`:h` are an escape-hatch size cap for when `dragPos:` is missing or you specifically want to lock the size (they block drag-resize). See "Free-floating images / `<Sticker>`" below.
+- `<Sticker id src :frame :rotate flipH flipV :w :h alt />` — drag-positioned floating image. Pair with a `dragPos:` block in slide frontmatter (the prep script emits a ready-to-paste one when it sees the `🪧 Sticker candidate` pattern). `npm run dev` → double-click to drag/resize/rotate; positions write back to `dragPos[id]`. `frame: 'polaroid' | 'shadow'` for decorative chrome. `flipH` / `flipV` mirror the image (use when porting PPTX `flipH="1"` / `flipV="1"`). `:rotate="N"` is a fixed decorative tilt in degrees (composes with `rotate` from the drag editor). `:w`/`:h` are an escape-hatch size cap for when `dragPos:` is missing or you specifically want to lock the size (they block drag-resize). See "Free-floating images / `<Sticker>`" below.
 
 #### Layout prop reference
 
@@ -350,7 +383,7 @@ A few non-obvious props worth knowing about on the theme layouts:
 
 ### Annotated images
 
-When a slide has the `🎬 PPTX animation` annotation **and** the underlying content is a photograph (or other raster image) with overlay annotations — bounding-box callouts, stat readouts, labels — the canonical pattern is the `<AnnotatedImage>` component (theme-josh) with image-space child elements: `<Box>`, `<Label>`, `<Layer>`. All positions are in source-pixel space (the deck `w × h` from the analysis header), so values paste straight from `_analysis.md`. HTML `<img>` for every raster layer (PDF-export safe), absolutely-positioned `<div>`s for boxes/labels.
+When a slide has the `🎬 PPTX animation` annotation **and** the underlying content is a photograph (or other raster image) with overlay annotations — bounding-box callouts, stat readouts, labels — the canonical pattern is the `<AnnotatedImage>` component (fenbrook) with image-space child elements: `<Box>`, `<Label>`, `<Layer>`. All positions are in source-pixel space (the deck `w × h` from the analysis header), so values paste straight from `_analysis.md`. HTML `<img>` for every raster layer (PDF-export safe), absolutely-positioned `<div>`s for boxes/labels.
 
 The same component subsumes the layered-image-swap pattern (where one image is the base and others reveal regions on click). When a `🔄 IMAGE-SWAP-REVEAL` annotation lists overlapping picture bboxes, reach for `<AnnotatedImage>` rather than the older `<div class="stage">` recipe — fewer moving parts.
 
@@ -446,6 +479,41 @@ Two fixes (either works): strip the indentation so no child line starts with 4+ 
 
 Default to `<Diagram :spec="…" />` and you'll never hit this.
 
+### Gotcha: SVG `<text>` typography attributes get overridden
+
+Inside an inline `<svg>` in slides.md, **put typography in inline `style`**, not in presentation attributes. The attributes survive into the DOM but lose the CSS cascade to UnoCSS/theme rules, so `<text font-size="16">` ends up rendering at the slide's inherited body font size — labels come out 3–4× the intended size and overflow whatever box they were sized to fit.
+
+```html
+<!-- Wrong — font-size attribute gets out-specificity'd; renders huge -->
+<text x="121" y="94" font-size="16" text-anchor="middle" fill="#111">belief</text>
+
+<!-- Right — inline style wins the cascade -->
+<text x="121" y="94" style="font-size:16px;text-anchor:middle;dominant-baseline:middle" fill="#111">belief</text>
+```
+
+`fill`, `stroke`, `x`, `y`, `width`, `height`, `viewBox`, `preserveAspectRatio`, `href` (on `<image>`) all work fine as attributes. The issue is specific to typography on `<text>` — `font-size`, `font-weight`, `font-family`, `text-anchor`, `dominant-baseline`. Easiest rule: pile all `<text>` typography into one `style="…"` and stop reaching for the per-attribute form.
+
+This does **not** apply inside `<Diagram>` spec JSON — the component renders the SVG itself with its own scoped CSS, so spec fields work as documented. The gotcha is only for raw inline SVG authored in markdown.
+
+### Gotcha: `<Youtube>` width/height props in flex containers
+
+`<Youtube id="…" width="800" height="450" />` ignores `width` / `height` when nested in a flex container — the iframe ends up tall-and-narrow because the flex parent sizes it. Use a plain `<iframe>` inside a wrapper that has an explicit `aspect-ratio: 16 / 9` and let CSS handle the size:
+
+```html
+<div class="video-wrap">
+  <iframe src="https://www.youtube.com/embed/<ID>"
+          allow="autoplay; encrypted-media; picture-in-picture"
+          allowfullscreen></iframe>
+</div>
+
+<style scoped>
+.video-wrap { width: min(80%, 1024px); aspect-ratio: 16 / 9; overflow: hidden; border-radius: 6px; }
+.video-wrap iframe { width: 100%; height: 100%; border: 0; display: block; }
+</style>
+```
+
+This is also what the `**Videos:**` block in the analysis recommends — when porting a `⚠ video placeholder`, default to the iframe form.
+
 ### Gotcha: YAML reserved characters in frontmatter values
 
 Slide frontmatter is YAML, so layout props that look like single punctuation marks need quoting or they get reinterpreted. The one that bites in this repo is the `outro` layout's `mark` prop: `mark: ?` parses as a complex-mapping-key indicator and arrives at the component as `undefined` (the layout silently falls back to its default `?`).
@@ -473,7 +541,7 @@ PPTX stores image crops as four edge insets (`<a:srcRect l="..." t="..." r="..."
 
 When a picture is cropped, the analysis flags it with `✂ crop l=…% t=…% r=…% b=…%` and prints four ready-to-paste CSS percentages — `width`, `height`, `left`, `top` — already computed against the wrapper.
 
-**Shorthand:** the theme-josh `<Cropped>` component encapsulates the wrapper + scale math. Pass the four edge insets straight from the analysis, optionally with the bbox aspect:
+**Shorthand:** the fenbrook `<Cropped>` component encapsulates the wrapper + scale math. Pass the four edge insets straight from the analysis, optionally with the bbox aspect:
 
 ```md
 <Cropped src="./image3.png" :crop="{ l: 0, t: 22.8, r: 0, b: 25.3 }" :aspect="[224, 175]" alt="…" />
@@ -513,7 +581,7 @@ For the common case of "use the cropped image inside the `media` layout's `::med
 
 #### Free-floating images / `<Sticker>`
 
-Some source slides have many small images placed at specific, irregular positions — illustrations scattered around a central diagram, polaroid-style reference photos, a "wall" of cover art. None of the standard layouts fit: `gallery` forces a grid, `media` assumes one dominant image, `image-bg` is a single background.
+Some source slides have small images placed at specific, irregular positions — illustrations scattered around a central diagram, polaroid-style reference photos, a "wall" of cover art, or just an article + a reaction photo + a caption (meme territory). None of the standard layouts fit: `gallery` forces a grid, `media` assumes one dominant image, `image-bg` is a single background.
 
 The pattern is `<Sticker id src />` paired with a `dragPos:` block in slide frontmatter. Slidev's `<v-drag>` powers the drag-edit: double-click any sticker in `npm run dev` and you get drag/resize/rotate handles. Releasing the handle writes the new pos back to `dragPos[id]` in the markdown source.
 
@@ -533,18 +601,37 @@ dragPos:
 <Sticker id="pic-2" src="./image9.png" />
 ```
 
-The `pos` string is `"x,y,w,h"` or `"x,y,w,h,rotation"` in **Slidev canvas coords** (default 980 × 551, 16:9). The prep script does this conversion for you — every picture line in `**Pictures:**` ends with `→ slidev pos \`x,y,w,h\``, and when a slide has 3+ free-floating pictures the script also emits a ready-to-paste `dragPos:` YAML block and matching `<Sticker>` lines under a `🪧 Sticker candidate` annotation. Just copy both blocks into the slide and run the dev server to nudge.
+The `pos` string is `"x,y,w,h"` or `"x,y,w,h,rotation"` in **Slidev canvas coords** (default 980 × 551, 16:9). The prep script does this conversion for you — every picture line in `**Pictures:**` ends with `→ slidev pos \`x,y,w,h\``, and when a slide has 2+ free-floating pictures the script also emits a ready-to-paste `dragPos:` YAML block and matching `<Sticker>` / `<v-drag>+<Cropped>` lines under a `🪧 Sticker candidate` annotation. Just copy both blocks into the slide and run the dev server to nudge.
 
 **Props:**
 
 - `id` (required) — must be unique across the slide. Keys in `dragPos:` are scoped to the slide.
 - `src` (required) — relative image path.
 - `alt` — alt text. Defaults to empty.
-- `rotate` — fixed decorative tilt in deg. Composes with the editor's rotation handle (which writes a 5th value to the `pos` string). Use this when you want a "stuck on the corkboard" look that the user shouldn't accidentally undo by dragging.
+- `rotate` — fixed decorative tilt in deg. Composes with the editor's rotation handle (which writes a 5th value to the `pos` string) and with `flipH` / `flipV`. Set this when the PPTX picture line shows `⤿ rot=N°` — that's the source's intentional tilt.
+- `flipH` / `flipV` — boolean. Mirror the image horizontally / vertically. Set when the picture line shows `⤿ flipH` / `⤿ flipV`. Common case: two facing heads ported from a single source image, where one of them has `flipH="1"` in PPTX.
 - `frame` — `'none'` (default), `'polaroid'` (white border + drop shadow), or `'shadow'` (drop shadow only).
 - `w` / `h` — optional hard size cap in slide-canvas px. Applied as inline CSS on the inner sticker box. Use when there's no `dragPos:` entry for this id (so v-drag would otherwise let the image render at its natural pixel size). **Setting `:w` / `:h` also blocks the drag editor's resize handle** — the inline style overrides whatever `<v-drag>` would apply, so the sticker freezes visually at the prop size even though dragPos is updating. Omit these props on stickers you want to fine-tune via dblclick-drag; the `dragPos:` `w,h` values handle sizing in the normal flow.
 
-**When NOT to use Sticker.** If the pictures form a clean grid, use `gallery`. If one picture is dominant and the rest are decorative, use `media` or `image`. If multiple pictures are layered and reveal regions on click, use `<AnnotatedImage>`. `<Sticker>` is for the *no-clean-layout* case where positions are part of the slide's meaning (illustrations next to a diagram, a board of polaroids, etc.).
+**Cropped stickers.** `<Sticker>` doesn't crop — its `<img>` always uses `object-fit: contain`. When the PPTX picture has a `✂ crop` annotation, wrap a `<Cropped>` inside a raw `<v-drag>` instead:
+
+```md
+<v-drag pos="screaming-woman">
+  <Cropped src="./image3.png" :crop="{ l: 18.469, t: 0, r: 6.848, b: 0 }" :aspect="[267, 242]" />
+</v-drag>
+```
+
+prep.py already emits this form in the sticker-candidate block when a picture has a crop, so you usually paste it verbatim.
+
+**Combining with inline SVG / text overlays.** Stickers don't have to be alone. The richest unusual-layout slides combine:
+
+- 2+ `<Sticker>` for the photographic / illustrative pieces.
+- An inline `<svg>` inside a `<v-drag pos="…">` for any decorative chrome you can't recreate with `<Diagram>` (cloud bubble, custom callout, hand-drawn frame).
+- A `<v-drag pos="caption">` wrapping a styled `<p>` for any meme caption or pull quote (use a dark `background` pill so white text stays readable when it overlaps a light photo).
+
+Each gets its own entry in the `dragPos:` block. Drag-edit in dev to fine-tune.
+
+**When NOT to use Sticker.** If the pictures form a clean grid, use `gallery`. If one picture is dominant and the rest are decorative, use `media` or `image`. If multiple pictures are layered and reveal regions on click, use `<AnnotatedImage>`. `<Sticker>` is for the *no-clean-layout* case where positions are part of the slide's meaning (illustrations next to a diagram, a board of polaroids, two facing heads with a thought bubble, etc.).
 
 **Build vs dev.** Drag-editing only works in `npm run dev`. In `npm run build` (static SPA), stickers render exactly where the `dragPos:` block says. So: position in dev, ship from build. If `dragPos[id]` is missing for a sticker, the sticker mounts at its natural document-flow position and the editor captures whatever it lands at on the first drag — usually you want positions seeded by the prep script's `dragPos:` block.
 

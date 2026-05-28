@@ -1,0 +1,6 @@
+{
+  "private": true,
+  "scripts": {
+    "new": "node scripts/new-talk.mjs"
+  }
+}
