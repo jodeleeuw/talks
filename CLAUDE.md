@@ -4,17 +4,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repo shape
 
-This repo is a collection of [Slidev](https://sli.dev) talks. Each talk is a self-contained directory (at the repo root or under a bucket like `workshops/` / `tmp_talks/`), scaffolded from `template/`. Talks own their dependencies — the root has no shared `node_modules`, every talk installs/builds independently:
+This repo is a collection of [Slidev](https://sli.dev) talks. Each talk is a self-contained directory (at the repo root or under a bucket like `workshops/` / `tmp_talks/`), scaffolded from `template/`. Talks own their dependencies — there is no shared/hoisted `node_modules`, every talk installs/builds independently:
 
 ```bash
 cd <talk-dir>
-npm install
-npm run dev       # dev server at :3030
-npm run build     # static SPA into dist/
-npm run export    # PDF (requires playwright-chromium)
+pnpm install
+pnpm dev       # dev server at :3030
+pnpm build     # static SPA into dist/
+pnpm export    # PDF (requires playwright-chromium)
 ```
 
-The root `package.json` exists only to expose `npm run new` → `scripts/new-talk.mjs`, the interactive scaffolder (prompts for parent dir + name, copies `template/`, runs install, opens VS Code, starts dev server). It has no dependencies of its own. `README.md` also documents the by-hand `cp -r template/ …` flow. The other common path right now is the `pptx-to-slidev` skill — see below.
+**Package manager: pnpm, not npm.** Each talk still has its own `node_modules`, but pnpm hard-links every package from one global content-addressable store (`~/Library/pnpm/store` on this machine), so identical dependency versions across dozens of talks cost disk space only once. `npm install` would re-copy ~450 MB per talk and defeats this — always use `pnpm`. pnpm is provided by Corepack (`corepack enable pnpm`); the version is pinned in each `package.json`'s `packageManager` field. The Corepack/pnpm-11 loader needs Node 20+ (Node 24 in use here; nvm's default alias must point at it).
+
+The root `package.json` exists only to expose `pnpm new` → `scripts/new-talk.mjs`, the interactive scaffolder (prompts for parent dir + name, copies `template/`, runs `pnpm install`, opens VS Code, starts dev server). It has no runtime dependencies of its own. `README.md` also documents the by-hand `cp -r template/ …` flow. The other common path right now is the `pptx-to-slidev` skill — see below.
 
 ## The tooling, not the talks
 

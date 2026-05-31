@@ -116,10 +116,10 @@ async function main() {
     await writeFile(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
   }
 
-  console.log(`\nRunning npm install in ${rel}/`);
-  const install = spawnSync('npm', ['install'], { cwd: target, stdio: 'inherit' });
+  console.log(`\nRunning pnpm install in ${rel}/`);
+  const install = spawnSync('pnpm', ['install'], { cwd: target, stdio: 'inherit' });
   if (install.status !== 0) {
-    console.error('npm install failed');
+    console.error('pnpm install failed');
     process.exit(install.status ?? 1);
   }
 
@@ -130,7 +130,7 @@ async function main() {
   }
 
   console.log(`\nStarting dev server — Ctrl-C to stop\n`);
-  const dev = spawn('npm', ['run', 'dev', '--', '--open'], { cwd: target, stdio: 'inherit' });
+  const dev = spawn('pnpm', ['dev', '--open'], { cwd: target, stdio: 'inherit' });
   dev.on('exit', (code) => process.exit(code ?? 0));
 }
 

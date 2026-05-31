@@ -1,6 +1,7 @@
 {
   "name": "talk",
   "type": "module",
+  "packageManager": "pnpm@11.5.0",
   "scripts": {
     "dev": "slidev",
     "build": "slidev build",
