@@ -309,7 +309,7 @@ This gives the agent broad permissions in a narrow environment.
 
 # What leaves your computer?
 
-<p>Only what the <Hi>model sees</Hi>: your *prompts*, the *files it opens*, and the *output of commands it runs*. Everything else stays untouched.</p>
+Only what the <Hi>model sees</Hi>: your *prompts*, the *files it opens*, and the *output of commands it runs*. Everything else stays untouched.
 
 <p v-click>A <Hi>local model</Hi> keeps all of it on your disk.</p>
 
