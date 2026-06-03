@@ -1,0 +1,22 @@
+# Station I Log Data
+
+specimen_id: WQS-I-001 ; ph: 7.67 ; temperature: 16.8 ; turb_ntu: 2.12 ; dissolved_o2: 9.8 ; conductivity: 339
+specimen_id: WQS-I-002 ; ph: 7.56 ; temperature: 12.7 ; turb_ntu: 1.81 ; dissolved_o2: 11.6 ; conductivity: 265
+specimen_id: WQS-I-003 ; ph: 7.46 ; temperature: 21.4 ; turb_ntu: 1.70 ; dissolved_o2: 8.9 ; conductivity: 363
+specimen_id: WQS-I-004 ; ph: 7.33 ; temperature: 20.4 ; turb_ntu: 1.45 ; dissolved_o2: 9.3 ; conductivity: 365
+specimen_id: WQS-I-005 ; ph: 7.49 ; temperature: 18.6 ; turb_ntu: 2.12 ; dissolved_o2: 9.4 ; conductivity: 351
+specimen_id: WQS-I-006 ; ph: 7.61 ; temperature: 13.6 ; turb_ntu: 3.92 ; dissolved_o2: 10.8 ; conductivity: 293
+specimen_id: WQS-I-007 ; ph: 7.69 ; temperature: 14.3 ; turb_ntu: 1.77 ; dissolved_o2: 11.1 ; conductivity: 293
+specimen_id: WQS-I-008 ; ph: 7.63 ; temperature: 13.4 ; turb_ntu: 1.66 ; dissolved_o2: 10.9 ; conductivity: 295
+specimen_id: WQS-I-009 ; ph: 7.11 ; temperature: 22.0 ; turb_ntu: 0.82 ; dissolved_o2: 8.7 ; conductivity: 354
+specimen_id: WQS-I-010 ; ph: 7.90 ; temperature: 14.7 ; turb_ntu: 1.88 ; dissolved_o2: 10.4 ; conductivity: 298
+specimen_id: WQS-I-011 ; ph: 7.67 ; temperature: 16.8 ; turb_ntu: 1.46 ; dissolved_o2: 10.3 ; conductivity: 329
+specimen_id: WQS-I-012 ; ph: 8.00 ; temperature: 14.4 ; turb_ntu: 3.30 ; dissolved_o2: 10.8 ; conductivity: 340
+specimen_id: WQS-I-013 ; ph: 7.44 ; temperature: 15.2 ; turb_ntu: 1.84 ; dissolved_o2: 9.9 ; conductivity: 327
+specimen_id: WQS-I-014 ; ph: 7.37 ; temperature: 18.8 ; turb_ntu: 3.23 ; dissolved_o2: 9.7 ; conductivity: 337
+specimen_id: WQS-I-015 ; ph: 7.68 ; temperature: 16.6 ; turb_ntu: 1.62 ; dissolved_o2: 10.3 ; conductivity: 310
+specimen_id: WQS-I-016 ; ph: 7.78 ; temperature: 15.9 ; turb_ntu: 1.98 ; dissolved_o2: 10.3 ; conductivity: 343
+specimen_id: WQS-I-017 ; ph: 7.21 ; temperature: 19.1 ; turb_ntu: 1.04 ; dissolved_o2: 9.0 ; conductivity: 344
+specimen_id: WQS-I-018 ; ph: 7.58 ; temperature: 13.7 ; turb_ntu: 1.99 ; dissolved_o2: 11.2 ; conductivity: 310
+specimen_id: WQS-I-019 ; ph: 7.65 ; temperature: 15.6 ; turb_ntu: 1.86 ; dissolved_o2: 10.0 ; conductivity: 301
+specimen_id: WQS-I-020 ; ph: 7.73 ; temperature: 16.9 ; turb_ntu: 1.53 ; dissolved_o2: 9.8 ; conductivity: 323

@@ -1,0 +1,142 @@
+=== STATION N RECORDS ===
+
+Record WQS-N-001:
+  ph_val = 7.74
+  water_temp = 14.4
+  turb_ntu = 1.70
+  oxygen_mg_l = 10.7
+  cond_us = 303
+---
+Record WQS-N-002:
+  ph_val = 8.39
+  water_temp = 9.4
+  turb_ntu = 2.41
+  oxygen_mg_l = 12.0
+  cond_us = 277
+---
+Record WQS-N-003:
+  ph_val = 7.51
+  water_temp = 13.5
+  turb_ntu = 1.70
+  oxygen_mg_l = 11.1
+  cond_us = 312
+---
+Record WQS-N-004:
+  ph_val = 7.86
+  water_temp = 13.0
+  turb_ntu = 2.87
+  oxygen_mg_l = 11.1
+  cond_us = 290
+---
+Record WQS-N-005:
+  ph_val = 7.71
+  water_temp = 9.3
+  turb_ntu = 2.93
+  oxygen_mg_l = 12.0
+  cond_us = 271
+---
+Record WQS-N-006:
+  ph_val = 7.54
+  water_temp = 14.7
+  turb_ntu = 2.08
+  oxygen_mg_l = 10.6
+  cond_us = 330
+---
+Record WQS-N-007:
+  ph_val = 7.53
+  water_temp = 17.4
+  turb_ntu = 2.99
+  oxygen_mg_l = 10.0
+  cond_us = 327
+---
+Record WQS-N-008:
+  ph_val = 7.45
+  water_temp = 19.7
+  turb_ntu = 1.82
+  oxygen_mg_l = 9.3
+  cond_us = 353
+---
+Record WQS-N-009:
+  ph_val = 7.73
+  water_temp = 17.9
+  turb_ntu = 1.52
+  oxygen_mg_l = 9.4
+  cond_us = 348
+---
+Record WQS-N-010:
+  ph_val = 7.69
+  water_temp = 17.3
+  turb_ntu = 1.79
+  oxygen_mg_l = 10.4
+  cond_us = 321
+---
+Record WQS-N-011:
+  ph_val = 7.62
+  water_temp = 11.2
+  turb_ntu = 2.75
+  oxygen_mg_l = 11.6
+  cond_us = 283
+---
+Record WQS-N-012:
+  ph_val = 7.75
+  water_temp = 14.8
+  turb_ntu = 2.01
+  oxygen_mg_l = 10.5
+  cond_us = 289
+---
+Record WQS-N-013:
+  ph_val = 7.45
+  water_temp = 14.0
+  turb_ntu = 1.82
+  oxygen_mg_l = 10.7
+  cond_us = 280
+---
+Record WQS-N-014:
+  ph_val = 7.60
+  water_temp = 14.6
+  turb_ntu = 3.79
+  oxygen_mg_l = 10.6
+  cond_us = 311
+---
+Record WQS-N-015:
+  ph_val = 7.20
+  water_temp = 20.0
+  turb_ntu = 1.27
+  oxygen_mg_l = 9.6
+  cond_us = 333
+---
+Record WQS-N-016:
+  ph_val = 7.09
+  water_temp = 16.5
+  turb_ntu = 2.20
+  oxygen_mg_l = 10.7
+  cond_us = 324
+---
+Record WQS-N-017:
+  ph_val = 7.40
+  water_temp = 17.6
+  turb_ntu = 1.64
+  oxygen_mg_l = 10.2
+  cond_us = 333
+---
+Record WQS-N-018:
+  ph_val = 7.87
+  water_temp = 12.8
+  turb_ntu = 3.03
+  oxygen_mg_l = 11.1
+  cond_us = 300
+---
+Record WQS-N-019:
+  ph_val = 7.42
+  water_temp = 16.4
+  turb_ntu = 1.88
+  oxygen_mg_l = 10.4
+  cond_us = 330
+---
+Record WQS-N-020:
+  ph_val = 8.08
+  water_temp = 13.0
+  turb_ntu = 5.00
+  oxygen_mg_l = 10.8
+  cond_us = 282
+---

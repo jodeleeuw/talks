@@ -1,0 +1,22 @@
+# Station Q Log Data
+
+id: WQS-Q-001 ; ph: 7.8 ; temperature: 9.0 ; turbidity_index: 3.7 ; oxygen_mg_l: 11.7 ; conductivity: 248
+id: WQS-Q-002 ; ph: 7.7 ; temperature: 12.4 ; turbidity_index: 2.6 ; oxygen_mg_l: 11.9 ; conductivity: 288
+id: WQS-Q-003 ; ph: 7.4 ; temperature: 14.6 ; turbidity_index: 2.5 ; oxygen_mg_l: 10.6 ; conductivity: 279
+id: WQS-Q-004 ; ph: 7.5 ; temperature: 16.3 ; turbidity_index: 1.3 ; oxygen_mg_l: 10.7 ; conductivity: 320
+id: WQS-Q-005 ; ph: 7.6 ; temperature: 17.8 ; turbidity_index: 1.3 ; oxygen_mg_l: 9.4 ; conductivity: 322
+id: WQS-Q-006 ; ph: 7.7 ; temperature: 16.2 ; turbidity_index: 1.5 ; oxygen_mg_l: 10.3 ; conductivity: 315
+id: WQS-Q-007 ; ph: 7.6 ; temperature: 15.6 ; turbidity_index: 2.6 ; oxygen_mg_l: 10.5 ; conductivity: 318
+id: WQS-Q-008 ; ph: 7.8 ; temperature: 11.8 ; turbidity_index: 2.5 ; oxygen_mg_l: 11.6 ; conductivity: 312
+id: WQS-Q-009 ; ph: 7.6 ; temperature: 18.9 ; turbidity_index: 1.7 ; oxygen_mg_l: 9.4 ; conductivity: 378
+id: WQS-Q-010 ; ph: 7.5 ; temperature: 15.6 ; turbidity_index: 2.2 ; oxygen_mg_l: 10.2 ; conductivity: 293
+id: WQS-Q-011 ; ph: 7.5 ; temperature: 20.8 ; turbidity_index: 2.2 ; oxygen_mg_l: 8.7 ; conductivity: 362
+id: WQS-Q-012 ; ph: 7.7 ; temperature: 17.3 ; turbidity_index: 1.2 ; oxygen_mg_l: 10.3 ; conductivity: 320
+id: WQS-Q-013 ; ph: 7.4 ; temperature: 20.1 ; turbidity_index: 2.8 ; oxygen_mg_l: 9.2 ; conductivity: 328
+id: WQS-Q-014 ; ph: 7.8 ; temperature: 14.7 ; turbidity_index: 2.2 ; oxygen_mg_l: 10.6 ; conductivity: 320
+id: WQS-Q-015 ; ph: 8.0 ; temperature: 10.4 ; turbidity_index: 2.2 ; oxygen_mg_l: 11.6 ; conductivity: 262
+id: WQS-Q-016 ; ph: 7.9 ; temperature: 12.7 ; turbidity_index: 4.3 ; oxygen_mg_l: 11.6 ; conductivity: 260
+id: WQS-Q-017 ; ph: 7.7 ; temperature: 15.8 ; turbidity_index: 1.8 ; oxygen_mg_l: 10.1 ; conductivity: 297
+id: WQS-Q-018 ; ph: 7.5 ; temperature: 16.4 ; turbidity_index: 3.0 ; oxygen_mg_l: 10.0 ; conductivity: 332
+id: WQS-Q-019 ; ph: 7.8 ; temperature: 12.3 ; turbidity_index: 2.9 ; oxygen_mg_l: 11.2 ; conductivity: 275
+id: WQS-Q-020 ; ph: 7.4 ; temperature: 18.7 ; turbidity_index: 1.9 ; oxygen_mg_l: 9.9 ; conductivity: 299

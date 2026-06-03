@@ -1,0 +1,23 @@
+# Station E Water Quality Log
+# Generated 2026-06-01
+
+Sample: WQS-E-001 | pH: 7.34 | Temp: 18.2 C | Turbidity: 4.54 NTU | DO: 9.7 mg/L | Cond: 348
+Sample: WQS-E-002 | pH: 7.93 | Temp: 11.5 C | Turbidity: 4.46 NTU | DO: 10.8 mg/L | Cond: 304
+Sample: WQS-E-003 | pH: 7.25 | Temp: 17.3 C | Turbidity: 1.69 NTU | DO: 10.0 mg/L | Cond: 347
+Sample: WQS-E-004 | pH: 7.75 | Temp: 15.3 C | Turbidity: 2.47 NTU | DO: 11.0 mg/L | Cond: 307
+Sample: WQS-E-005 | pH: 7.18 | Temp: 23.0 C | Turbidity: 3.19 NTU | DO: 8.4 mg/L | Cond: 366
+Sample: WQS-E-006 | pH: 7.48 | Temp: 17.5 C | Turbidity: 2.48 NTU | DO: 9.8 mg/L | Cond: 330
+Sample: WQS-E-007 | pH: 7.46 | Temp: 18.1 C | Turbidity: 1.77 NTU | DO: 9.8 mg/L | Cond: 369
+Sample: WQS-E-008 | pH: 7.85 | Temp: 13.3 C | Turbidity: 2.11 NTU | DO: 11.1 mg/L | Cond: 304
+Sample: WQS-E-009 | pH: 7.56 | Temp: 19.1 C | Turbidity: 1.50 NTU | DO: 9.5 mg/L | Cond: 342
+Sample: WQS-E-010 | pH: 7.52 | Temp: 23.0 C | Turbidity: 2.42 NTU | DO: 8.2 mg/L | Cond: 390
+Sample: WQS-E-011 | pH: 6.87 | Temp: 23.0 C | Turbidity: 2.28 NTU | DO: 8.4 mg/L | Cond: 371
+Sample: WQS-E-012 | pH: 7.67 | Temp: 14.7 C | Turbidity: 2.15 NTU | DO: 10.7 mg/L | Cond: 317
+Sample: WQS-E-013 | pH: 7.58 | Temp: 16.1 C | Turbidity: 1.50 NTU | DO: 10.6 mg/L | Cond: 326
+Sample: WQS-E-014 | pH: 7.19 | Temp: 16.6 C | Turbidity: 1.64 NTU | DO: 10.1 mg/L | Cond: 317
+Sample: WQS-E-015 | pH: 7.39 | Temp: 17.7 C | Turbidity: 2.31 NTU | DO: 10.0 mg/L | Cond: 332
+Sample: WQS-E-016 | pH: 7.46 | Temp: 21.6 C | Turbidity: 0.77 NTU | DO: 8.6 mg/L | Cond: 374
+Sample: WQS-E-017 | pH: 7.63 | Temp: 16.5 C | Turbidity: 1.62 NTU | DO: 10.2 mg/L | Cond: 318
+Sample: WQS-E-018 | pH: 7.52 | Temp: 20.0 C | Turbidity: 3.20 NTU | DO: 9.8 mg/L | Cond: 369
+Sample: WQS-E-019 | pH: 7.58 | Temp: 16.6 C | Turbidity: 2.83 NTU | DO: 10.6 mg/L | Cond: 333
+Sample: WQS-E-020 | pH: 7.82 | Temp: 12.9 C | Turbidity: 2.68 NTU | DO: 11.1 mg/L | Cond: 298

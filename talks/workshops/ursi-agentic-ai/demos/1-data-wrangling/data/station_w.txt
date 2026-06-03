@@ -1,0 +1,22 @@
+# Station W Log Data
+
+specimen: WQS-W-001 , pH: 7.96 , temp_celsius: 9.1 , turbidity: 2.30 , do_level: 12.0 , electrical_cond: 264
+specimen: WQS-W-002 , pH: 7.73 , temp_celsius: 13.6 , turbidity: 2.04 , do_level: 10.4 , electrical_cond: 317
+specimen: WQS-W-003 , pH: 7.24 , temp_celsius: 21.4 , turbidity: 0.83 , do_level: 8.6 , electrical_cond: 361
+specimen: WQS-W-004 , pH: 7.47 , temp_celsius: 14.1 , turbidity: 1.78 , do_level: 11.0 , electrical_cond: 302
+specimen: WQS-W-005 , pH: 7.27 , temp_celsius: 19.3 , turbidity: 1.33 , do_level: 9.2 , electrical_cond: 324
+specimen: WQS-W-006 , pH: 7.86 , temp_celsius: 13.1 , turbidity: 1.88 , do_level: 10.8 , electrical_cond: 318
+specimen: WQS-W-007 , pH: 7.53 , temp_celsius: 16.7 , turbidity: 1.76 , do_level: 10.2 , electrical_cond: 344
+specimen: WQS-W-008 , pH: 7.18 , temp_celsius: 20.3 , turbidity: 1.24 , do_level: 9.2 , electrical_cond: 347
+specimen: WQS-W-009 , pH: 7.75 , temp_celsius: 15.2 , turbidity: 1.62 , do_level: 10.3 , electrical_cond: 294
+specimen: WQS-W-010 , pH: 7.85 , temp_celsius: 10.9 , turbidity: 1.98 , do_level: 12.0 , electrical_cond: 281
+specimen: WQS-W-011 , pH: 7.62 , temp_celsius: 14.5 , turbidity: 1.53 , do_level: 10.8 , electrical_cond: 295
+specimen: WQS-W-012 , pH: 7.30 , temp_celsius: 19.1 , turbidity: 1.28 , do_level: 9.7 , electrical_cond: 349
+specimen: WQS-W-013 , pH: 7.42 , temp_celsius: 14.8 , turbidity: 1.93 , do_level: 11.0 , electrical_cond: 327
+specimen: WQS-W-014 , pH: 7.74 , temp_celsius: 14.8 , turbidity: 2.36 , do_level: 10.7 , electrical_cond: 302
+specimen: WQS-W-015 , pH: 7.78 , temp_celsius: 12.1 , turbidity: 2.56 , do_level: 11.5 , electrical_cond: 307
+specimen: WQS-W-016 , pH: 7.50 , temp_celsius: 16.2 , turbidity: 3.02 , do_level: 10.2 , electrical_cond: 298
+specimen: WQS-W-017 , pH: 7.94 , temp_celsius: 11.6 , turbidity: 3.57 , do_level: 11.5 , electrical_cond: 272
+specimen: WQS-W-018 , pH: 7.56 , temp_celsius: 12.1 , turbidity: 4.17 , do_level: 11.3 , electrical_cond: 289
+specimen: WQS-W-019 , pH: 7.30 , temp_celsius: 19.3 , turbidity: 1.13 , do_level: 9.1 , electrical_cond: 353
+specimen: WQS-W-020 , pH: 7.64 , temp_celsius: 12.0 , turbidity: 2.03 , do_level: 11.0 , electrical_cond: 308

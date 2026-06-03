@@ -1,0 +1,162 @@
+[
+  {
+    "sample_code": "WQS-K-001",
+    "pH": 7.48,
+    "temp_c": 17.9,
+    "dissolved_oxygen_mg_l": 10.0,
+    "electrical_cond": 302,
+    "turbidity_val": 0.66
+  },
+  {
+    "sample_code": "WQS-K-002",
+    "pH": 7.78,
+    "temp_c": 13.0,
+    "dissolved_oxygen_mg_l": 11.2,
+    "electrical_cond": 296,
+    "turbidity_val": 1.19
+  },
+  {
+    "sample_code": "WQS-K-003",
+    "pH": 8.06,
+    "temp_c": 13.5,
+    "dissolved_oxygen_mg_l": 11.0,
+    "electrical_cond": 313,
+    "turbidity_val": 3.87
+  },
+  {
+    "sample_code": "WQS-K-004",
+    "pH": 7.83,
+    "temp_c": 12.3,
+    "dissolved_oxygen_mg_l": 10.9,
+    "electrical_cond": 293,
+    "turbidity_val": 1.09
+  },
+  {
+    "sample_code": "WQS-K-005",
+    "pH": 8.28,
+    "temp_c": 8.5,
+    "dissolved_oxygen_mg_l": 12.0,
+    "electrical_cond": 265,
+    "turbidity_val": 2.33
+  },
+  {
+    "sample_code": "WQS-K-006",
+    "pH": 7.41,
+    "temp_c": 20.1,
+    "dissolved_oxygen_mg_l": 9.0,
+    "electrical_cond": 363,
+    "turbidity_val": 3.01
+  },
+  {
+    "sample_code": "WQS-K-007",
+    "pH": 7.87,
+    "temp_c": 15.4,
+    "dissolved_oxygen_mg_l": 10.6,
+    "electrical_cond": 321,
+    "turbidity_val": 1.65
+  },
+  {
+    "sample_code": "WQS-K-008",
+    "pH": 7.7,
+    "temp_c": 14.4,
+    "dissolved_oxygen_mg_l": 10.9,
+    "electrical_cond": 314,
+    "turbidity_val": 4.72
+  },
+  {
+    "sample_code": "WQS-K-009",
+    "pH": 7.43,
+    "temp_c": 17.6,
+    "dissolved_oxygen_mg_l": 9.9,
+    "electrical_cond": 334,
+    "turbidity_val": 2.3
+  },
+  {
+    "sample_code": "WQS-K-010",
+    "pH": 7.71,
+    "temp_c": 18.4,
+    "dissolved_oxygen_mg_l": 9.7,
+    "electrical_cond": 353,
+    "turbidity_val": 2.93
+  },
+  {
+    "sample_code": "WQS-K-011",
+    "pH": 7.67,
+    "temp_c": 18.4,
+    "dissolved_oxygen_mg_l": 9.7,
+    "electrical_cond": 343,
+    "turbidity_val": 3.14
+  },
+  {
+    "sample_code": "WQS-K-012",
+    "pH": 7.81,
+    "temp_c": 10.9,
+    "dissolved_oxygen_mg_l": 11.7,
+    "electrical_cond": 286,
+    "turbidity_val": 0.7
+  },
+  {
+    "sample_code": "WQS-K-013",
+    "pH": 7.56,
+    "temp_c": 14.6,
+    "dissolved_oxygen_mg_l": 11.1,
+    "electrical_cond": 308,
+    "turbidity_val": 2.85
+  },
+  {
+    "sample_code": "WQS-K-014",
+    "pH": 7.24,
+    "temp_c": 20.6,
+    "dissolved_oxygen_mg_l": 9.0,
+    "electrical_cond": 355,
+    "turbidity_val": 1.75
+  },
+  {
+    "sample_code": "WQS-K-015",
+    "pH": 7.76,
+    "temp_c": 15.0,
+    "dissolved_oxygen_mg_l": 10.9,
+    "electrical_cond": 326,
+    "turbidity_val": 4.06
+  },
+  {
+    "sample_code": "WQS-K-016",
+    "pH": 7.66,
+    "temp_c": 17.0,
+    "dissolved_oxygen_mg_l": 9.8,
+    "electrical_cond": 299,
+    "turbidity_val": 0.52
+  },
+  {
+    "sample_code": "WQS-K-017",
+    "pH": 7.49,
+    "temp_c": 17.8,
+    "dissolved_oxygen_mg_l": 10.1,
+    "electrical_cond": 332,
+    "turbidity_val": 0.97
+  },
+  {
+    "sample_code": "WQS-K-018",
+    "pH": 7.41,
+    "temp_c": 18.3,
+    "dissolved_oxygen_mg_l": 9.8,
+    "electrical_cond": 347,
+    "turbidity_val": 1.35
+  },
+  {
+    "sample_code": "WQS-K-019",
+    "pH": 7.44,
+    "temp_c": 16.6,
+    "dissolved_oxygen_mg_l": 10.4,
+    "electrical_cond": 346,
+    "turbidity_val": 3.12
+  },
+  {
+    "sample_code": "WQS-K-020",
+    "pH": 7.87,
+    "temp_c": 13.5,
+    "dissolved_oxygen_mg_l": 11.0,
+    "electrical_cond": 302,
+    "turbidity_val": 3.39
+  }
+]

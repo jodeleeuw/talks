@@ -1,0 +1,22 @@
+# Station U Log Data
+
+id: WQS-U-001 | ph_level: 7.86 | temperature_celsius: 15.5 | turbidity_index: 2.31 | do_mgl: 10.4 | conductivity_us_cm: 323
+id: WQS-U-002 | ph_level: 7.61 | temperature_celsius: 15.0 | turbidity_index: 1.68 | do_mgl: 10.7 | conductivity_us_cm: 314
+id: WQS-U-003 | ph_level: 7.55 | temperature_celsius: 18.4 | turbidity_index: 2.50 | do_mgl: 9.8 | conductivity_us_cm: 353
+id: WQS-U-004 | ph_level: 7.84 | temperature_celsius: 10.9 | turbidity_index: 2.30 | do_mgl: 11.9 | conductivity_us_cm: 297
+id: WQS-U-005 | ph_level: 7.44 | temperature_celsius: 12.8 | turbidity_index: 1.72 | do_mgl: 11.2 | conductivity_us_cm: 310
+id: WQS-U-006 | ph_level: 8.10 | temperature_celsius: 12.9 | turbidity_index: 1.85 | do_mgl: 10.7 | conductivity_us_cm: 292
+id: WQS-U-007 | ph_level: 7.71 | temperature_celsius: 16.0 | turbidity_index: 1.89 | do_mgl: 10.1 | conductivity_us_cm: 307
+id: WQS-U-008 | ph_level: 7.48 | temperature_celsius: 19.6 | turbidity_index: 0.91 | do_mgl: 9.6 | conductivity_us_cm: 356
+id: WQS-U-009 | ph_level: 7.78 | temperature_celsius: 12.3 | turbidity_index: 2.06 | do_mgl: 11.5 | conductivity_us_cm: 297
+id: WQS-U-010 | ph_level: 7.65 | temperature_celsius: 11.4 | turbidity_index: 2.29 | do_mgl: 11.2 | conductivity_us_cm: 305
+id: WQS-U-011 | ph_level: 7.80 | temperature_celsius: 10.3 | turbidity_index: 2.45 | do_mgl: 11.6 | conductivity_us_cm: 245
+id: WQS-U-012 | ph_level: 7.42 | temperature_celsius: 17.7 | turbidity_index: 1.21 | do_mgl: 10.0 | conductivity_us_cm: 345
+id: WQS-U-013 | ph_level: 7.34 | temperature_celsius: 21.1 | turbidity_index: 1.27 | do_mgl: 9.0 | conductivity_us_cm: 351
+id: WQS-U-014 | ph_level: 7.96 | temperature_celsius: 18.1 | turbidity_index: 1.50 | do_mgl: 9.9 | conductivity_us_cm: 331
+id: WQS-U-015 | ph_level: 7.38 | temperature_celsius: 19.1 | turbidity_index: 0.99 | do_mgl: 9.7 | conductivity_us_cm: 311
+id: WQS-U-016 | ph_level: 7.78 | temperature_celsius: 13.0 | turbidity_index: 3.84 | do_mgl: 11.0 | conductivity_us_cm: 301
+id: WQS-U-017 | ph_level: 7.67 | temperature_celsius: 12.6 | turbidity_index: 1.86 | do_mgl: 10.9 | conductivity_us_cm: 289
+id: WQS-U-018 | ph_level: 8.02 | temperature_celsius: 13.7 | turbidity_index: 1.63 | do_mgl: 11.1 | conductivity_us_cm: 303
+id: WQS-U-019 | ph_level: 8.04 | temperature_celsius: 13.2 | turbidity_index: 1.96 | do_mgl: 11.1 | conductivity_us_cm: 296
+id: WQS-U-020 | ph_level: 7.62 | temperature_celsius: 16.1 | turbidity_index: 1.89 | do_mgl: 10.5 | conductivity_us_cm: 327

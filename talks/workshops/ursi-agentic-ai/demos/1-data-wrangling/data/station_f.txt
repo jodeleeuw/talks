@@ -1,0 +1,142 @@
+=== STATION F FIELD DATA ===
+
+Record for Sample: WQS-F-001
+  pH Measurement  -> 7.53
+  Temp (Celsius)  -> 14.7
+  Turbidity Index -> 2.11
+  Dissolved O2    -> 11.0
+  Conductivity    -> 281
+----------------------------------------
+Record for Sample: WQS-F-002
+  pH Measurement  -> 7.56
+  Temp (Celsius)  -> 16.5
+  Turbidity Index -> 3.25
+  Dissolved O2    -> 10.2
+  Conductivity    -> 346
+----------------------------------------
+Record for Sample: WQS-F-003
+  pH Measurement  -> 7.52
+  Temp (Celsius)  -> 16.7
+  Turbidity Index -> 2.22
+  Dissolved O2    -> 9.7
+  Conductivity    -> 348
+----------------------------------------
+Record for Sample: WQS-F-004
+  pH Measurement  -> 7.64
+  Temp (Celsius)  -> 15.7
+  Turbidity Index -> 1.68
+  Dissolved O2    -> 10.6
+  Conductivity    -> 309
+----------------------------------------
+Record for Sample: WQS-F-005
+  pH Measurement  -> 7.83
+  Temp (Celsius)  -> 14.5
+  Turbidity Index -> 3.10
+  Dissolved O2    -> 10.7
+  Conductivity    -> 302
+----------------------------------------
+Record for Sample: WQS-F-006
+  pH Measurement  -> 7.39
+  Temp (Celsius)  -> 17.4
+  Turbidity Index -> 1.81
+  Dissolved O2    -> 9.9
+  Conductivity    -> 321
+----------------------------------------
+Record for Sample: WQS-F-007
+  pH Measurement  -> 7.53
+  Temp (Celsius)  -> 16.9
+  Turbidity Index -> 1.47
+  Dissolved O2    -> 10.1
+  Conductivity    -> 303
+----------------------------------------
+Record for Sample: WQS-F-008
+  pH Measurement  -> 7.34
+  Temp (Celsius)  -> 15.6
+  Turbidity Index -> 1.83
+  Dissolved O2    -> 10.0
+  Conductivity    -> 322
+----------------------------------------
+Record for Sample: WQS-F-009
+  pH Measurement  -> 6.84
+  Temp (Celsius)  -> 22.7
+  Turbidity Index -> 0.64
+  Dissolved O2    -> 8.5
+  Conductivity    -> 375
+----------------------------------------
+Record for Sample: WQS-F-010
+  pH Measurement  -> 7.84
+  Temp (Celsius)  -> 14.9
+  Turbidity Index -> 2.15
+  Dissolved O2    -> 11.0
+  Conductivity    -> 305
+----------------------------------------
+Record for Sample: WQS-F-011
+  pH Measurement  -> 7.48
+  Temp (Celsius)  -> 13.8
+  Turbidity Index -> 3.02
+  Dissolved O2    -> 10.4
+  Conductivity    -> 296
+----------------------------------------
+Record for Sample: WQS-F-012
+  pH Measurement  -> 7.74
+  Temp (Celsius)  -> 16.2
+  Turbidity Index -> 1.51
+  Dissolved O2    -> 10.3
+  Conductivity    -> 341
+----------------------------------------
+Record for Sample: WQS-F-013
+  pH Measurement  -> 7.86
+  Temp (Celsius)  -> 16.9
+  Turbidity Index -> 3.03
+  Dissolved O2    -> 10.2
+  Conductivity    -> 343
+----------------------------------------
+Record for Sample: WQS-F-014
+  pH Measurement  -> 7.55
+  Temp (Celsius)  -> 23.0
+  Turbidity Index -> 0.55
+  Dissolved O2    -> 8.6
+  Conductivity    -> 377
+----------------------------------------
+Record for Sample: WQS-F-015
+  pH Measurement  -> 7.69
+  Temp (Celsius)  -> 13.4
+  Turbidity Index -> 1.66
+  Dissolved O2    -> 11.4
+  Conductivity    -> 313
+----------------------------------------
+Record for Sample: WQS-F-016
+  pH Measurement  -> 7.71
+  Temp (Celsius)  -> 13.6
+  Turbidity Index -> 2.41
+  Dissolved O2    -> 10.9
+  Conductivity    -> 298
+----------------------------------------
+Record for Sample: WQS-F-017
+  pH Measurement  -> 7.30
+  Temp (Celsius)  -> 18.0
+  Turbidity Index -> 1.96
+  Dissolved O2    -> 9.6
+  Conductivity    -> 340
+----------------------------------------
+Record for Sample: WQS-F-018
+  pH Measurement  -> 7.36
+  Temp (Celsius)  -> 15.6
+  Turbidity Index -> 2.10
+  Dissolved O2    -> 10.5
+  Conductivity    -> 297
+----------------------------------------
+Record for Sample: WQS-F-019
+  pH Measurement  -> 7.73
+  Temp (Celsius)  -> 12.5
+  Turbidity Index -> 2.21
+  Dissolved O2    -> 11.3
+  Conductivity    -> 299
+----------------------------------------
+Record for Sample: WQS-F-020
+  pH Measurement  -> 7.39
+  Temp (Celsius)  -> 17.6
+  Turbidity Index -> 1.50
+  Dissolved O2    -> 9.9
+  Conductivity    -> 312
+----------------------------------------

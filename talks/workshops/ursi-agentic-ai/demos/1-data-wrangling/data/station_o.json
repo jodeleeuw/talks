@@ -1,0 +1,162 @@
+[
+  {
+    "code": "WQS-O-001",
+    "ph": 7.31,
+    "temp": 18.3,
+    "turb_ntu": 2.33,
+    "do_level": 9.8,
+    "electro_cond": 353
+  },
+  {
+    "code": "WQS-O-002",
+    "ph": 8.05,
+    "temp": 12.3,
+    "turb_ntu": 1.99,
+    "do_level": 11.3,
+    "electro_cond": 298
+  },
+  {
+    "code": "WQS-O-003",
+    "ph": 7.63,
+    "temp": 16.0,
+    "turb_ntu": 2.72,
+    "do_level": 10.4,
+    "electro_cond": 342
+  },
+  {
+    "code": "WQS-O-004",
+    "ph": 7.8,
+    "temp": 17.6,
+    "turb_ntu": 2.35,
+    "do_level": 10.0,
+    "electro_cond": 319
+  },
+  {
+    "code": "WQS-O-005",
+    "ph": 7.98,
+    "temp": 14.1,
+    "turb_ntu": 2.55,
+    "do_level": 10.8,
+    "electro_cond": 312
+  },
+  {
+    "code": "WQS-O-006",
+    "ph": 7.48,
+    "temp": 12.6,
+    "turb_ntu": 2.19,
+    "do_level": 11.2,
+    "electro_cond": 276
+  },
+  {
+    "code": "WQS-O-007",
+    "ph": 8.06,
+    "temp": 11.5,
+    "turb_ntu": 2.93,
+    "do_level": 11.9,
+    "electro_cond": 291
+  },
+  {
+    "code": "WQS-O-008",
+    "ph": 7.72,
+    "temp": 13.2,
+    "turb_ntu": 1.69,
+    "do_level": 11.2,
+    "electro_cond": 315
+  },
+  {
+    "code": "WQS-O-009",
+    "ph": 7.37,
+    "temp": 19.1,
+    "turb_ntu": 0.97,
+    "do_level": 9.3,
+    "electro_cond": 337
+  },
+  {
+    "code": "WQS-O-010",
+    "ph": 7.48,
+    "temp": 18.3,
+    "turb_ntu": 1.1,
+    "do_level": 9.9,
+    "electro_cond": 316
+  },
+  {
+    "code": "WQS-O-011",
+    "ph": 7.83,
+    "temp": 13.4,
+    "turb_ntu": 2.2,
+    "do_level": 11.1,
+    "electro_cond": 301
+  },
+  {
+    "code": "WQS-O-012",
+    "ph": 7.7,
+    "temp": 16.5,
+    "turb_ntu": 2.37,
+    "do_level": 9.8,
+    "electro_cond": 318
+  },
+  {
+    "code": "WQS-O-013",
+    "ph": 7.21,
+    "temp": 19.8,
+    "turb_ntu": 3.33,
+    "do_level": 9.6,
+    "electro_cond": 343
+  },
+  {
+    "code": "WQS-O-014",
+    "ph": 8.09,
+    "temp": 11.3,
+    "turb_ntu": 2.08,
+    "do_level": 11.3,
+    "electro_cond": 277
+  },
+  {
+    "code": "WQS-O-015",
+    "ph": 7.16,
+    "temp": 23.0,
+    "turb_ntu": 1.08,
+    "do_level": 8.7,
+    "electro_cond": 368
+  },
+  {
+    "code": "WQS-O-016",
+    "ph": 7.34,
+    "temp": 22.8,
+    "turb_ntu": 0.6,
+    "do_level": 8.8,
+    "electro_cond": 374
+  },
+  {
+    "code": "WQS-O-017",
+    "ph": 7.79,
+    "temp": 14.1,
+    "turb_ntu": 1.72,
+    "do_level": 10.6,
+    "electro_cond": 316
+  },
+  {
+    "code": "WQS-O-018",
+    "ph": 7.49,
+    "temp": 16.7,
+    "turb_ntu": 1.41,
+    "do_level": 9.9,
+    "electro_cond": 340
+  },
+  {
+    "code": "WQS-O-019",
+    "ph": 8.01,
+    "temp": 12.8,
+    "turb_ntu": 2.47,
+    "do_level": 11.0,
+    "electro_cond": 322
+  },
+  {
+    "code": "WQS-O-020",
+    "ph": 7.47,
+    "temp": 14.7,
+    "turb_ntu": 1.85,
+    "do_level": 10.5,
+    "electro_cond": 327
+  }
+]

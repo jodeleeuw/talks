@@ -1,0 +1,122 @@
+=== STATION G RECORDS ===
+
+Record WQS-G-001:
+  pH_value = 7.67
+  temperature_celsius = 15.7
+  turbidity_ntu = 2.13
+  oxygen_mg_l = 10.5
+  cond_us = 321
+Record WQS-G-002:
+  pH_value = 7.43
+  temperature_celsius = 19.2
+  turbidity_ntu = 2.69
+  oxygen_mg_l = 9.4
+  cond_us = 362
+Record WQS-G-003:
+  pH_value = 7.93
+  temperature_celsius = 10.4
+  turbidity_ntu = 2.98
+  oxygen_mg_l = 12.0
+  cond_us = 264
+Record WQS-G-004:
+  pH_value = 7.51
+  temperature_celsius = 20.8
+  turbidity_ntu = 2.51
+  oxygen_mg_l = 9.5
+  cond_us = 310
+Record WQS-G-005:
+  pH_value = 7.36
+  temperature_celsius = 17.2
+  turbidity_ntu = 1.27
+  oxygen_mg_l = 10.0
+  cond_us = 307
+Record WQS-G-006:
+  pH_value = 7.70
+  temperature_celsius = 15.8
+  turbidity_ntu = 1.44
+  oxygen_mg_l = 10.8
+  cond_us = 330
+Record WQS-G-007:
+  pH_value = 7.30
+  temperature_celsius = 18.0
+  turbidity_ntu = 1.60
+  oxygen_mg_l = 10.0
+  cond_us = 302
+Record WQS-G-008:
+  pH_value = 7.65
+  temperature_celsius = 18.3
+  turbidity_ntu = 1.12
+  oxygen_mg_l = 9.4
+  cond_us = 335
+Record WQS-G-009:
+  pH_value = 7.25
+  temperature_celsius = 19.1
+  turbidity_ntu = 1.05
+  oxygen_mg_l = 9.3
+  cond_us = 325
+Record WQS-G-010:
+  pH_value = 7.25
+  temperature_celsius = 16.4
+  turbidity_ntu = 1.31
+  oxygen_mg_l = 10.1
+  cond_us = 323
+Record WQS-G-011:
+  pH_value = 7.95
+  temperature_celsius = 14.3
+  turbidity_ntu = 2.19
+  oxygen_mg_l = 10.7
+  cond_us = 312
+Record WQS-G-012:
+  pH_value = 7.54
+  temperature_celsius = 17.7
+  turbidity_ntu = 3.23
+  oxygen_mg_l = 9.3
+  cond_us = 309
+Record WQS-G-013:
+  pH_value = 7.71
+  temperature_celsius = 15.2
+  turbidity_ntu = 1.69
+  oxygen_mg_l = 10.4
+  cond_us = 336
+Record WQS-G-014:
+  pH_value = 7.62
+  temperature_celsius = 16.1
+  turbidity_ntu = 3.43
+  oxygen_mg_l = 10.1
+  cond_us = 313
+Record WQS-G-015:
+  pH_value = 7.51
+  temperature_celsius = 18.4
+  turbidity_ntu = 2.29
+  oxygen_mg_l = 9.6
+  cond_us = 353
+Record WQS-G-016:
+  pH_value = 7.45
+  temperature_celsius = 15.1
+  turbidity_ntu = 1.48
+  oxygen_mg_l = 10.3
+  cond_us = 326
+Record WQS-G-017:
+  pH_value = 7.59
+  temperature_celsius = 13.5
+  turbidity_ntu = 2.13
+  oxygen_mg_l = 11.1
+  cond_us = 323
+Record WQS-G-018:
+  pH_value = 8.00
+  temperature_celsius = 10.6
+  turbidity_ntu = 2.14
+  oxygen_mg_l = 11.7
+  cond_us = 286
+Record WQS-G-019:
+  pH_value = 7.79
+  temperature_celsius = 13.4
+  turbidity_ntu = 1.67
+  oxygen_mg_l = 10.8
+  cond_us = 285
+Record WQS-G-020:
+  pH_value = 8.16
+  temperature_celsius = 10.1
+  turbidity_ntu = 2.97
+  oxygen_mg_l = 12.0
+  cond_us = 256

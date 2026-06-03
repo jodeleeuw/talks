@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720" font-family="'IBM Plex Mono', ui-monospace, Menlo, monospace">
+  <rect width="1280" height="720" fill="#0e0d0c"/>
+  <!-- faint window chrome -->
+  <rect x="0" y="0" width="1280" height="56" fill="#161412"/>
+  <circle cx="36" cy="28" r="8" fill="#5a534b"/>
+  <circle cx="64" cy="28" r="8" fill="#5a534b"/>
+  <circle cx="92" cy="28" r="8" fill="#5a534b"/>
+  <text x="640" y="34" text-anchor="middle" font-size="20" fill="#6b645b">agent · ~/experiments</text>
+
+  <g font-size="26" xml:space="preserve">
+    <!-- natural-language prompt -->
+    <text x="56" y="124"><tspan fill="#e0a87a">&gt; analyze trials.csv and flag subjects missing &gt;30% of responses</tspan></text>
+    <text x="84" y="172"><tspan fill="#c8946a">✓</tspan><tspan fill="#9b9488"> Read data/trials.csv — 12,438 rows</tspan></text>
+    <text x="84" y="210"><tspan fill="#c8946a">✓</tspan><tspan fill="#9b9488"> Flagged 7 subjects → results/flagged.csv</tspan></text>
+
+    <!-- second natural-language prompt -->
+    <text x="56" y="282"><tspan fill="#e0a87a">&gt; now redo figure 2 with those subjects excluded</tspan></text>
+    <text x="84" y="330"><tspan fill="#c8946a">✓</tspan><tspan fill="#9b9488"> Edited analysis.py</tspan></text>
+    <text x="84" y="368"><tspan fill="#c8946a">✓</tspan><tspan fill="#9b9488"> Ran python analysis.py --exclude flagged.csv</tspan></text>
+    <text x="84" y="406"><tspan fill="#c8946a">✓</tspan><tspan fill="#9b9488"> Updated results/figure-2.png</tspan></text>
+
+    <!-- live prompt -->
+    <text x="56" y="478"><tspan fill="#e0a87a">&gt;</tspan></text>
+    <rect x="78" y="458" width="14" height="26" fill="#e8e3d8"/>
+  </g>
+</svg>

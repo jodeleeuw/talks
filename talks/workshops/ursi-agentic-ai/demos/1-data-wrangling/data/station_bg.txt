@@ -1,0 +1,142 @@
+=== STATION BG RECORDS ===
+
+Record WQS-BG-001:
+  pH_value = 7.8
+  temp = 17.0
+  turbidity_ntu = 1.72
+  dissolved_o2 = 10.0
+  electro_cond = 339
+===
+Record WQS-BG-002:
+  pH_value = 7.9
+  temp = 13.2
+  turbidity_ntu = 2.51
+  dissolved_o2 = 10.8
+  electro_cond = 298
+===
+Record WQS-BG-003:
+  pH_value = 7.7
+  temp = 14.2
+  turbidity_ntu = 1.94
+  dissolved_o2 = 10.7
+  electro_cond = 303
+===
+Record WQS-BG-004:
+  pH_value = 7.4
+  temp = 14.1
+  turbidity_ntu = 1.90
+  dissolved_o2 = 11.0
+  electro_cond = 300
+===
+Record WQS-BG-005:
+  pH_value = 7.7
+  temp = 16.5
+  turbidity_ntu = 1.40
+  dissolved_o2 = 10.1
+  electro_cond = 333
+===
+Record WQS-BG-006:
+  pH_value = 7.6
+  temp = 17.8
+  turbidity_ntu = 1.25
+  dissolved_o2 = 9.6
+  electro_cond = 304
+===
+Record WQS-BG-007:
+  pH_value = 7.9
+  temp = 14.6
+  turbidity_ntu = 2.48
+  dissolved_o2 = 10.7
+  electro_cond = 302
+===
+Record WQS-BG-008:
+  pH_value = 7.4
+  temp = 17.4
+  turbidity_ntu = 1.26
+  dissolved_o2 = 10.4
+  electro_cond = 339
+===
+Record WQS-BG-009:
+  pH_value = 7.8
+  temp = 15.6
+  turbidity_ntu = 1.55
+  dissolved_o2 = 10.5
+  electro_cond = 317
+===
+Record WQS-BG-010:
+  pH_value = 7.7
+  temp = 17.7
+  turbidity_ntu = 1.51
+  dissolved_o2 = 9.9
+  electro_cond = 330
+===
+Record WQS-BG-011:
+  pH_value = 7.8
+  temp = 12.2
+  turbidity_ntu = 2.10
+  dissolved_o2 = 11.3
+  electro_cond = 297
+===
+Record WQS-BG-012:
+  pH_value = 7.8
+  temp = 14.5
+  turbidity_ntu = 2.31
+  dissolved_o2 = 10.8
+  electro_cond = 335
+===
+Record WQS-BG-013:
+  pH_value = 7.8
+  temp = 16.6
+  turbidity_ntu = 1.39
+  dissolved_o2 = 10.0
+  electro_cond = 330
+===
+Record WQS-BG-014:
+  pH_value = 7.5
+  temp = 18.5
+  turbidity_ntu = 1.78
+  dissolved_o2 = 9.5
+  electro_cond = 351
+===
+Record WQS-BG-015:
+  pH_value = 7.4
+  temp = 16.0
+  turbidity_ntu = 3.81
+  dissolved_o2 = 10.3
+  electro_cond = 344
+===
+Record WQS-BG-016:
+  pH_value = 7.6
+  temp = 13.4
+  turbidity_ntu = 2.02
+  dissolved_o2 = 11.1
+  electro_cond = 310
+===
+Record WQS-BG-017:
+  pH_value = 7.6
+  temp = 16.8
+  turbidity_ntu = 2.42
+  dissolved_o2 = 10.3
+  electro_cond = 332
+===
+Record WQS-BG-018:
+  pH_value = 7.3
+  temp = 17.9
+  turbidity_ntu = 2.95
+  dissolved_o2 = 9.7
+  electro_cond = 313
+===
+Record WQS-BG-019:
+  pH_value = 7.4
+  temp = 16.9
+  turbidity_ntu = 1.82
+  dissolved_o2 = 10.3
+  electro_cond = 343
+===
+Record WQS-BG-020:
+  pH_value = 7.7
+  temp = 16.8
+  turbidity_ntu = 3.16
+  dissolved_o2 = 10.2
+  electro_cond = 323
+===

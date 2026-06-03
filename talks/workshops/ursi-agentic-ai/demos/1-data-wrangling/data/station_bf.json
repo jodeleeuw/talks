@@ -1,0 +1,162 @@
+[
+  {
+    "sample_id": "WQS-BF-001",
+    "pH": 7.99,
+    "temp": 10.5,
+    "turbidity_index": 3.3,
+    "oxygen": 11.4,
+    "electro_cond": 282
+  },
+  {
+    "sample_id": "WQS-BF-002",
+    "pH": 7.42,
+    "temp": 15.1,
+    "turbidity_index": 3.25,
+    "oxygen": 10.5,
+    "electro_cond": 312
+  },
+  {
+    "sample_id": "WQS-BF-003",
+    "pH": 7.42,
+    "temp": 16.3,
+    "turbidity_index": 1.4,
+    "oxygen": 10.0,
+    "electro_cond": 320
+  },
+  {
+    "sample_id": "WQS-BF-004",
+    "pH": 7.4,
+    "temp": 16.8,
+    "turbidity_index": 1.3,
+    "oxygen": 10.0,
+    "electro_cond": 333
+  },
+  {
+    "sample_id": "WQS-BF-005",
+    "pH": 7.25,
+    "temp": 19.6,
+    "turbidity_index": 1.7,
+    "oxygen": 9.5,
+    "electro_cond": 358
+  },
+  {
+    "sample_id": "WQS-BF-006",
+    "pH": 7.53,
+    "temp": 14.5,
+    "turbidity_index": 1.94,
+    "oxygen": 10.6,
+    "electro_cond": 327
+  },
+  {
+    "sample_id": "WQS-BF-007",
+    "pH": 7.7,
+    "temp": 15.3,
+    "turbidity_index": 1.56,
+    "oxygen": 10.4,
+    "electro_cond": 326
+  },
+  {
+    "sample_id": "WQS-BF-008",
+    "pH": 7.78,
+    "temp": 13.0,
+    "turbidity_index": 1.74,
+    "oxygen": 11.4,
+    "electro_cond": 286
+  },
+  {
+    "sample_id": "WQS-BF-009",
+    "pH": 7.58,
+    "temp": 18.8,
+    "turbidity_index": 1.26,
+    "oxygen": 9.2,
+    "electro_cond": 331
+  },
+  {
+    "sample_id": "WQS-BF-010",
+    "pH": 7.49,
+    "temp": 14.1,
+    "turbidity_index": 2.78,
+    "oxygen": 10.8,
+    "electro_cond": 302
+  },
+  {
+    "sample_id": "WQS-BF-011",
+    "pH": 7.9,
+    "temp": 13.5,
+    "turbidity_index": 1.87,
+    "oxygen": 11.0,
+    "electro_cond": 292
+  },
+  {
+    "sample_id": "WQS-BF-012",
+    "pH": 7.66,
+    "temp": 15.2,
+    "turbidity_index": 1.93,
+    "oxygen": 10.4,
+    "electro_cond": 292
+  },
+  {
+    "sample_id": "WQS-BF-013",
+    "pH": 7.41,
+    "temp": 18.3,
+    "turbidity_index": 1.37,
+    "oxygen": 9.7,
+    "electro_cond": 316
+  },
+  {
+    "sample_id": "WQS-BF-014",
+    "pH": 7.52,
+    "temp": 19.0,
+    "turbidity_index": 1.54,
+    "oxygen": 9.6,
+    "electro_cond": 310
+  },
+  {
+    "sample_id": "WQS-BF-015",
+    "pH": 7.68,
+    "temp": 14.2,
+    "turbidity_index": 2.01,
+    "oxygen": 10.8,
+    "electro_cond": 294
+  },
+  {
+    "sample_id": "WQS-BF-016",
+    "pH": 8.12,
+    "temp": 11.5,
+    "turbidity_index": 3.38,
+    "oxygen": 11.7,
+    "electro_cond": 268
+  },
+  {
+    "sample_id": "WQS-BF-017",
+    "pH": 7.75,
+    "temp": 14.2,
+    "turbidity_index": 2.35,
+    "oxygen": 10.8,
+    "electro_cond": 342
+  },
+  {
+    "sample_id": "WQS-BF-018",
+    "pH": 7.42,
+    "temp": 16.9,
+    "turbidity_index": 1.26,
+    "oxygen": 10.3,
+    "electro_cond": 315
+  },
+  {
+    "sample_id": "WQS-BF-019",
+    "pH": 7.36,
+    "temp": 17.9,
+    "turbidity_index": 1.57,
+    "oxygen": 9.9,
+    "electro_cond": 334
+  },
+  {
+    "sample_id": "WQS-BF-020",
+    "pH": 7.08,
+    "temp": 22.7,
+    "turbidity_index": 1.14,
+    "oxygen": 9.0,
+    "electro_cond": 355
+  }
+]

@@ -1,0 +1,162 @@
+[
+  {
+    "sample_code": "WQS-V-001",
+    "ph_val": 7.22,
+    "temperature_celsius": 17.6,
+    "turbidity": 1.64,
+    "do_level": 9.8,
+    "electro_cond": 327
+  },
+  {
+    "sample_code": "WQS-V-002",
+    "ph_val": 7.66,
+    "temperature_celsius": 14.9,
+    "turbidity": 2.17,
+    "do_level": 10.8,
+    "electro_cond": 292
+  },
+  {
+    "sample_code": "WQS-V-003",
+    "ph_val": 7.21,
+    "temperature_celsius": 19.6,
+    "turbidity": 1.28,
+    "do_level": 9.9,
+    "electro_cond": 326
+  },
+  {
+    "sample_code": "WQS-V-004",
+    "ph_val": 7.75,
+    "temperature_celsius": 11.2,
+    "turbidity": 2.05,
+    "do_level": 11.8,
+    "electro_cond": 278
+  },
+  {
+    "sample_code": "WQS-V-005",
+    "ph_val": 7.45,
+    "temperature_celsius": 23.0,
+    "turbidity": 1.77,
+    "do_level": 8.6,
+    "electro_cond": 361
+  },
+  {
+    "sample_code": "WQS-V-006",
+    "ph_val": 7.34,
+    "temperature_celsius": 17.4,
+    "turbidity": 1.48,
+    "do_level": 9.8,
+    "electro_cond": 332
+  },
+  {
+    "sample_code": "WQS-V-007",
+    "ph_val": 7.71,
+    "temperature_celsius": 16.2,
+    "turbidity": 2.45,
+    "do_level": 10.1,
+    "electro_cond": 308
+  },
+  {
+    "sample_code": "WQS-V-008",
+    "ph_val": 7.52,
+    "temperature_celsius": 18.4,
+    "turbidity": 1.24,
+    "do_level": 9.9,
+    "electro_cond": 327
+  },
+  {
+    "sample_code": "WQS-V-009",
+    "ph_val": 7.56,
+    "temperature_celsius": 15.1,
+    "turbidity": 1.5,
+    "do_level": 11.3,
+    "electro_cond": 317
+  },
+  {
+    "sample_code": "WQS-V-010",
+    "ph_val": 7.9,
+    "temperature_celsius": 15.0,
+    "turbidity": 1.91,
+    "do_level": 10.7,
+    "electro_cond": 329
+  },
+  {
+    "sample_code": "WQS-V-011",
+    "ph_val": 7.84,
+    "temperature_celsius": 13.9,
+    "turbidity": 1.9,
+    "do_level": 10.9,
+    "electro_cond": 305
+  },
+  {
+    "sample_code": "WQS-V-012",
+    "ph_val": 7.98,
+    "temperature_celsius": 15.0,
+    "turbidity": 2.29,
+    "do_level": 10.6,
+    "electro_cond": 324
+  },
+  {
+    "sample_code": "WQS-V-013",
+    "ph_val": 7.59,
+    "temperature_celsius": 15.8,
+    "turbidity": 3.62,
+    "do_level": 10.5,
+    "electro_cond": 324
+  },
+  {
+    "sample_code": "WQS-V-014",
+    "ph_val": 7.95,
+    "temperature_celsius": 13.2,
+    "turbidity": 1.83,
+    "do_level": 10.9,
+    "electro_cond": 274
+  },
+  {
+    "sample_code": "WQS-V-015",
+    "ph_val": 7.66,
+    "temperature_celsius": 17.8,
+    "turbidity": 2.67,
+    "do_level": 10.0,
+    "electro_cond": 338
+  },
+  {
+    "sample_code": "WQS-V-016",
+    "ph_val": 7.66,
+    "temperature_celsius": 15.2,
+    "turbidity": 1.86,
+    "do_level": 10.6,
+    "electro_cond": 315
+  },
+  {
+    "sample_code": "WQS-V-017",
+    "ph_val": 7.44,
+    "temperature_celsius": 17.0,
+    "turbidity": 2.3,
+    "do_level": 9.9,
+    "electro_cond": 303
+  },
+  {
+    "sample_code": "WQS-V-018",
+    "ph_val": 7.88,
+    "temperature_celsius": 14.4,
+    "turbidity": 3.01,
+    "do_level": 11.0,
+    "electro_cond": 297
+  },
+  {
+    "sample_code": "WQS-V-019",
+    "ph_val": 7.68,
+    "temperature_celsius": 15.4,
+    "turbidity": 2.72,
+    "do_level": 10.5,
+    "electro_cond": 318
+  },
+  {
+    "sample_code": "WQS-V-020",
+    "ph_val": 7.26,
+    "temperature_celsius": 18.1,
+    "turbidity": 1.92,
+    "do_level": 9.7,
+    "electro_cond": 343
+  }
+]

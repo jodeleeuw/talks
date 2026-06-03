@@ -1,0 +1,22 @@
+# Station BJ Log Data
+
+sample_code: WQS-BJ-001 , pH_value: 7.76 , temp_c: 12.8 , turb_ntu: 2.1 , do: 11.3 , conductivity_us_cm: 280
+sample_code: WQS-BJ-002 , pH_value: 7.84 , temp_c: 17.3 , turb_ntu: 1.8 , do: 10.2 , conductivity_us_cm: 329
+sample_code: WQS-BJ-003 , pH_value: 7.40 , temp_c: 16.9 , turb_ntu: 1.4 , do: 9.9 , conductivity_us_cm: 313
+sample_code: WQS-BJ-004 , pH_value: 7.97 , temp_c: 11.3 , turb_ntu: 2.3 , do: 11.5 , conductivity_us_cm: 286
+sample_code: WQS-BJ-005 , pH_value: 7.65 , temp_c: 16.7 , turb_ntu: 1.9 , do: 10.4 , conductivity_us_cm: 322
+sample_code: WQS-BJ-006 , pH_value: 7.45 , temp_c: 13.1 , turb_ntu: 2.4 , do: 10.8 , conductivity_us_cm: 297
+sample_code: WQS-BJ-007 , pH_value: 7.52 , temp_c: 10.6 , turb_ntu: 2.9 , do: 11.6 , conductivity_us_cm: 293
+sample_code: WQS-BJ-008 , pH_value: 7.73 , temp_c: 15.1 , turb_ntu: 1.5 , do: 10.6 , conductivity_us_cm: 297
+sample_code: WQS-BJ-009 , pH_value: 7.40 , temp_c: 23.0 , turb_ntu: 1.5 , do: 8.5 , conductivity_us_cm: 364
+sample_code: WQS-BJ-010 , pH_value: 7.68 , temp_c: 18.8 , turb_ntu: 1.4 , do: 9.7 , conductivity_us_cm: 328
+sample_code: WQS-BJ-011 , pH_value: 8.07 , temp_c: 11.9 , turb_ntu: 2.1 , do: 11.4 , conductivity_us_cm: 296
+sample_code: WQS-BJ-012 , pH_value: 7.51 , temp_c: 15.6 , turb_ntu: 2.0 , do: 10.7 , conductivity_us_cm: 334
+sample_code: WQS-BJ-013 , pH_value: 7.64 , temp_c: 17.7 , turb_ntu: 1.2 , do: 10.0 , conductivity_us_cm: 330
+sample_code: WQS-BJ-014 , pH_value: 7.42 , temp_c: 16.8 , turb_ntu: 1.4 , do: 10.0 , conductivity_us_cm: 301
+sample_code: WQS-BJ-015 , pH_value: 7.44 , temp_c: 18.7 , turb_ntu: 1.3 , do: 9.6 , conductivity_us_cm: 333
+sample_code: WQS-BJ-016 , pH_value: 7.88 , temp_c: 14.4 , turb_ntu: 1.8 , do: 11.0 , conductivity_us_cm: 318
+sample_code: WQS-BJ-017 , pH_value: 7.86 , temp_c: 14.6 , turb_ntu: 1.7 , do: 10.4 , conductivity_us_cm: 322
+sample_code: WQS-BJ-018 , pH_value: 7.81 , temp_c: 16.7 , turb_ntu: 1.6 , do: 10.1 , conductivity_us_cm: 322
+sample_code: WQS-BJ-019 , pH_value: 7.73 , temp_c: 12.6 , turb_ntu: 2.0 , do: 10.8 , conductivity_us_cm: 267
+sample_code: WQS-BJ-020 , pH_value: 7.53 , temp_c: 16.5 , turb_ntu: 1.6 , do: 9.8 , conductivity_us_cm: 301

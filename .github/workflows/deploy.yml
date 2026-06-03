@@ -1,0 +1,75 @@
+name: Deploy talks to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Allow the workflow to publish to Pages.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time; let a newer push supersede an in-flight run.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Enable pnpm (via corepack)
+        run: corepack enable
+
+      - name: Build every talk under talks/
+        env:
+          # Repo name = Pages base prefix, e.g. served at https://<owner>.github.io/talks/
+          REPO: ${{ github.event.repository.name }}
+        run: |
+          set -euo pipefail
+          site="$GITHUB_WORKSPACE/_site"
+          mkdir -p "$site"
+          links=""
+
+          # A "talk" is any directory under talks/ that has its own package.json.
+          # Arbitrary nesting (talks/<bucket>/<name>/) is supported.
+          while IFS= read -r pkg; do
+            dir="$(dirname "$pkg")"
+            rel="${dir#talks/}"          # strip the source talks/ folder -> workshops/ursi-agentic-ai
+            base="/$REPO/$rel/"          # served path                    -> /talks/workshops/ursi-agentic-ai/
+            echo "::group::Build $rel (base $base)"
+            (
+              cd "$dir"
+              pnpm install --no-frozen-lockfile
+              pnpm build --base "$base"
+            )
+            mkdir -p "$site/$rel"
+            cp -r "$dir/dist/." "$site/$rel/"
+            links="$links<li><a href=\"$rel/\">$rel</a></li>"
+            echo "::endgroup::"
+          done < <(find talks -name package.json -not -path '*/node_modules/*' | sort)
+
+          # Simple landing page at the Pages root listing the talks.
+          printf '<!doctype html><meta charset="utf-8"><title>Talks</title><h1>Talks</h1><ul>%s</ul>\n' "$links" > "$site/index.html"
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

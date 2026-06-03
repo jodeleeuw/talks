@@ -1,0 +1,142 @@
+=== STATION BE RECORDS ===
+
+Record WQS-BE-001:
+  pH_value = 7.7
+  temp = 16.8
+  turb_ntu = 1.75
+  dissolved_oxygen_mg_l = 10.4
+  electro_cond = 328
+===
+Record WQS-BE-002:
+  pH_value = 7.3
+  temp = 17.4
+  turb_ntu = 1.23
+  dissolved_oxygen_mg_l = 9.8
+  electro_cond = 352
+===
+Record WQS-BE-003:
+  pH_value = 7.4
+  temp = 17.1
+  turb_ntu = 1.30
+  dissolved_oxygen_mg_l = 10.1
+  electro_cond = 335
+===
+Record WQS-BE-004:
+  pH_value = 7.7
+  temp = 12.1
+  turb_ntu = 3.09
+  dissolved_oxygen_mg_l = 11.2
+  electro_cond = 284
+===
+Record WQS-BE-005:
+  pH_value = 7.4
+  temp = 13.3
+  turb_ntu = 1.87
+  dissolved_oxygen_mg_l = 11.1
+  electro_cond = 317
+===
+Record WQS-BE-006:
+  pH_value = 7.9
+  temp = 14.7
+  turb_ntu = 1.70
+  dissolved_oxygen_mg_l = 10.6
+  electro_cond = 292
+===
+Record WQS-BE-007:
+  pH_value = 7.7
+  temp = 12.5
+  turb_ntu = 2.66
+  dissolved_oxygen_mg_l = 11.4
+  electro_cond = 327
+===
+Record WQS-BE-008:
+  pH_value = 7.5
+  temp = 20.1
+  turb_ntu = 1.52
+  dissolved_oxygen_mg_l = 9.2
+  electro_cond = 327
+===
+Record WQS-BE-009:
+  pH_value = 7.8
+  temp = 12.7
+  turb_ntu = 1.87
+  dissolved_oxygen_mg_l = 11.4
+  electro_cond = 293
+===
+Record WQS-BE-010:
+  pH_value = 7.3
+  temp = 16.1
+  turb_ntu = 3.45
+  dissolved_oxygen_mg_l = 10.9
+  electro_cond = 311
+===
+Record WQS-BE-011:
+  pH_value = 7.9
+  temp = 14.3
+  turb_ntu = 1.96
+  dissolved_oxygen_mg_l = 10.9
+  electro_cond = 324
+===
+Record WQS-BE-012:
+  pH_value = 8.0
+  temp = 14.9
+  turb_ntu = 2.00
+  dissolved_oxygen_mg_l = 10.9
+  electro_cond = 284
+===
+Record WQS-BE-013:
+  pH_value = 7.2
+  temp = 17.3
+  turb_ntu = 1.91
+  dissolved_oxygen_mg_l = 9.9
+  electro_cond = 310
+===
+Record WQS-BE-014:
+  pH_value = 7.9
+  temp = 12.1
+  turb_ntu = 3.23
+  dissolved_oxygen_mg_l = 11.4
+  electro_cond = 301
+===
+Record WQS-BE-015:
+  pH_value = 7.8
+  temp = 13.0
+  turb_ntu = 1.87
+  dissolved_oxygen_mg_l = 11.0
+  electro_cond = 290
+===
+Record WQS-BE-016:
+  pH_value = 7.5
+  temp = 19.6
+  turb_ntu = 1.20
+  dissolved_oxygen_mg_l = 9.7
+  electro_cond = 358
+===
+Record WQS-BE-017:
+  pH_value = 7.5
+  temp = 17.0
+  turb_ntu = 2.23
+  dissolved_oxygen_mg_l = 10.2
+  electro_cond = 347
+===
+Record WQS-BE-018:
+  pH_value = 7.6
+  temp = 14.2
+  turb_ntu = 1.65
+  dissolved_oxygen_mg_l = 11.1
+  electro_cond = 297
+===
+Record WQS-BE-019:
+  pH_value = 7.7
+  temp = 17.6
+  turb_ntu = 1.42
+  dissolved_oxygen_mg_l = 10.3
+  electro_cond = 322
+===
+Record WQS-BE-020:
+  pH_value = 7.7
+  temp = 12.3
+  turb_ntu = 1.86
+  dissolved_oxygen_mg_l = 11.5
+  electro_cond = 289
+===

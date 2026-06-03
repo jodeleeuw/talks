@@ -1,0 +1,122 @@
+=== STATION BH RECORDS ===
+
+Record WQS-BH-001:
+  ph_val = 7.77
+  temperature = 15.5
+  turb = 1.73
+  dissolved_o2 = 10.9
+  electrical_cond = 332
+Record WQS-BH-002:
+  ph_val = 7.58
+  temperature = 15.9
+  turb = 1.73
+  dissolved_o2 = 10.2
+  electrical_cond = 331
+Record WQS-BH-003:
+  ph_val = 7.10
+  temperature = 15.4
+  turb = 1.73
+  dissolved_o2 = 10.8
+  electrical_cond = 294
+Record WQS-BH-004:
+  ph_val = 7.52
+  temperature = 17.0
+  turb = 1.73
+  dissolved_o2 = 9.9
+  electrical_cond = 330
+Record WQS-BH-005:
+  ph_val = 7.68
+  temperature = 16.7
+  turb = 1.73
+  dissolved_o2 = 10.3
+  electrical_cond = 315
+Record WQS-BH-006:
+  ph_val = 7.73
+  temperature = 14.5
+  turb = 1.73
+  dissolved_o2 = 10.5
+  electrical_cond = 307
+Record WQS-BH-007:
+  ph_val = 7.46
+  temperature = 18.3
+  turb = 1.73
+  dissolved_o2 = 9.8
+  electrical_cond = 361
+Record WQS-BH-008:
+  ph_val = 7.45
+  temperature = 20.3
+  turb = 1.73
+  dissolved_o2 = 9.0
+  electrical_cond = 331
+Record WQS-BH-009:
+  ph_val = 7.74
+  temperature = 13.7
+  turb = 1.73
+  dissolved_o2 = 10.8
+  electrical_cond = 285
+Record WQS-BH-010:
+  ph_val = 7.72
+  temperature = 15.9
+  turb = 1.73
+  dissolved_o2 = 10.5
+  electrical_cond = 345
+Record WQS-BH-011:
+  ph_val = 7.22
+  temperature = 20.2
+  turb = 1.73
+  dissolved_o2 = 8.7
+  electrical_cond = 367
+Record WQS-BH-012:
+  ph_val = 7.37
+  temperature = 18.5
+  turb = 1.73
+  dissolved_o2 = 10.0
+  electrical_cond = 338
+Record WQS-BH-013:
+  ph_val = 7.13
+  temperature = 18.1
+  turb = 1.73
+  dissolved_o2 = 9.7
+  electrical_cond = 343
+Record WQS-BH-014:
+  ph_val = 7.92
+  temperature = 12.1
+  turb = 1.73
+  dissolved_o2 = 10.9
+  electrical_cond = 317
+Record WQS-BH-015:
+  ph_val = 8.01
+  temperature = 12.6
+  turb = 1.73
+  dissolved_o2 = 11.2
+  electrical_cond = 291
+Record WQS-BH-016:
+  ph_val = 7.92
+  temperature = 10.0
+  turb = 1.73
+  dissolved_o2 = 11.7
+  electrical_cond = 278
+Record WQS-BH-017:
+  ph_val = 7.57
+  temperature = 19.1
+  turb = 1.73
+  dissolved_o2 = 9.4
+  electrical_cond = 324
+Record WQS-BH-018:
+  ph_val = 8.20
+  temperature = 8.0
+  turb = 1.73
+  dissolved_o2 = 12.0
+  electrical_cond = 247
+Record WQS-BH-019:
+  ph_val = 7.46
+  temperature = 14.4
+  turb = 1.73
+  dissolved_o2 = 11.1
+  electrical_cond = 298
+Record WQS-BH-020:
+  ph_val = 7.69
+  temperature = 15.6
+  turb = 1.73
+  dissolved_o2 = 10.1
+  electrical_cond = 328

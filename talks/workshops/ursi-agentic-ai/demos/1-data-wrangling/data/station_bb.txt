@@ -1,0 +1,22 @@
+# Station BB Log Data
+
+id: WQS-BB-001 | acidity: 7.65 | temperature: 13.8 | turbidity_index: 3.48 | dissolved_o2: 11.2 | electro_cond: 311
+id: WQS-BB-002 | acidity: 7.56 | temperature: 14.0 | turbidity_index: 2.83 | dissolved_o2: 10.9 | electro_cond: 305
+id: WQS-BB-003 | acidity: 7.58 | temperature: 15.7 | turbidity_index: 2.53 | dissolved_o2: 10.4 | electro_cond: 298
+id: WQS-BB-004 | acidity: 7.59 | temperature: 18.8 | turbidity_index: 1.79 | dissolved_o2: 9.9 | electro_cond: 304
+id: WQS-BB-005 | acidity: 7.69 | temperature: 20.3 | turbidity_index: 1.69 | dissolved_o2: 9.7 | electro_cond: 355
+id: WQS-BB-006 | acidity: 8.04 | temperature: 13.8 | turbidity_index: 2.26 | dissolved_o2: 10.8 | electro_cond: 304
+id: WQS-BB-007 | acidity: 7.84 | temperature: 10.8 | turbidity_index: 2.86 | dissolved_o2: 11.3 | electro_cond: 297
+id: WQS-BB-008 | acidity: 7.57 | temperature: 16.5 | turbidity_index: 1.48 | dissolved_o2: 10.1 | electro_cond: 321
+id: WQS-BB-009 | acidity: 7.89 | temperature: 9.8 | turbidity_index: 4.93 | dissolved_o2: 12.0 | electro_cond: 272
+id: WQS-BB-010 | acidity: 7.68 | temperature: 15.5 | turbidity_index: 1.77 | dissolved_o2: 10.6 | electro_cond: 318
+id: WQS-BB-011 | acidity: 7.80 | temperature: 15.0 | turbidity_index: 1.80 | dissolved_o2: 10.4 | electro_cond: 311
+id: WQS-BB-012 | acidity: 7.74 | temperature: 17.1 | turbidity_index: 2.91 | dissolved_o2: 9.9 | electro_cond: 324
+id: WQS-BB-013 | acidity: 7.53 | temperature: 19.7 | turbidity_index: 2.10 | dissolved_o2: 9.4 | electro_cond: 360
+id: WQS-BB-014 | acidity: 7.46 | temperature: 17.0 | turbidity_index: 1.32 | dissolved_o2: 10.4 | electro_cond: 316
+id: WQS-BB-015 | acidity: 7.35 | temperature: 16.0 | turbidity_index: 3.07 | dissolved_o2: 10.9 | electro_cond: 305
+id: WQS-BB-016 | acidity: 7.86 | temperature: 8.0 | turbidity_index: 2.41 | dissolved_o2: 12.0 | electro_cond: 240
+id: WQS-BB-017 | acidity: 7.88 | temperature: 16.8 | turbidity_index: 1.37 | dissolved_o2: 10.6 | electro_cond: 312
+id: WQS-BB-018 | acidity: 7.84 | temperature: 9.5 | turbidity_index: 2.17 | dissolved_o2: 11.9 | electro_cond: 267
+id: WQS-BB-019 | acidity: 7.25 | temperature: 20.9 | turbidity_index: 1.43 | dissolved_o2: 8.8 | electro_cond: 362
+id: WQS-BB-020 | acidity: 7.46 | temperature: 17.9 | turbidity_index: 1.17 | dissolved_o2: 9.8 | electro_cond: 331

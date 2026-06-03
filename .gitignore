@@ -1,4 +1,5 @@
 node_modules/
+.pnpm-store/
 dist/
 .slidev/
 __pycache__/
@@ -7,4 +8,10 @@ tmp_talks/
 *.videos.json
 *.thumbnails/
 .venv/
+
+# Claude Code (per-machine, not shared)
 .claude/scheduled_tasks.lock
+.claude/settings.local.json
+
+# macOS
+.DS_Store

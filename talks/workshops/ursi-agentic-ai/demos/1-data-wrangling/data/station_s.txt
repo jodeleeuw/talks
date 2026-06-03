@@ -1,0 +1,142 @@
+=== STATION S RECORDS ===
+
+Record WQS-S-001:
+  ph_level = 7.56
+  water_temp = 17.1
+  turbidity_index = 1.5
+  oxygen_mg_l = 10.2
+  electrical_cond = 344
+===
+Record WQS-S-002:
+  ph_level = 7.43
+  water_temp = 20.4
+  turbidity_index = 1.0
+  oxygen_mg_l = 9.0
+  electrical_cond = 355
+===
+Record WQS-S-003:
+  ph_level = 7.56
+  water_temp = 15.9
+  turbidity_index = 1.4
+  oxygen_mg_l = 10.1
+  electrical_cond = 329
+===
+Record WQS-S-004:
+  ph_level = 7.10
+  water_temp = 17.0
+  turbidity_index = 1.7
+  oxygen_mg_l = 9.9
+  electrical_cond = 316
+===
+Record WQS-S-005:
+  ph_level = 7.30
+  water_temp = 22.6
+  turbidity_index = 0.6
+  oxygen_mg_l = 8.4
+  electrical_cond = 388
+===
+Record WQS-S-006:
+  ph_level = 7.63
+  water_temp = 17.7
+  turbidity_index = 1.4
+  oxygen_mg_l = 10.0
+  electrical_cond = 348
+===
+Record WQS-S-007:
+  ph_level = 7.71
+  water_temp = 15.9
+  turbidity_index = 1.4
+  oxygen_mg_l = 9.7
+  electrical_cond = 357
+===
+Record WQS-S-008:
+  ph_level = 7.67
+  water_temp = 20.7
+  turbidity_index = 1.4
+  oxygen_mg_l = 9.4
+  electrical_cond = 350
+===
+Record WQS-S-009:
+  ph_level = 7.27
+  water_temp = 19.5
+  turbidity_index = 1.3
+  oxygen_mg_l = 9.5
+  electrical_cond = 350
+===
+Record WQS-S-010:
+  ph_level = 7.73
+  water_temp = 13.1
+  turbidity_index = 1.8
+  oxygen_mg_l = 10.8
+  electrical_cond = 326
+===
+Record WQS-S-011:
+  ph_level = 7.98
+  water_temp = 10.3
+  turbidity_index = 2.6
+  oxygen_mg_l = 11.6
+  electrical_cond = 293
+===
+Record WQS-S-012:
+  ph_level = 7.71
+  water_temp = 17.8
+  turbidity_index = 2.4
+  oxygen_mg_l = 9.6
+  electrical_cond = 344
+===
+Record WQS-S-013:
+  ph_level = 7.64
+  water_temp = 12.0
+  turbidity_index = 2.3
+  oxygen_mg_l = 11.5
+  electrical_cond = 300
+===
+Record WQS-S-014:
+  ph_level = 7.81
+  water_temp = 14.6
+  turbidity_index = 1.7
+  oxygen_mg_l = 11.0
+  electrical_cond = 313
+===
+Record WQS-S-015:
+  ph_level = 7.29
+  water_temp = 19.0
+  turbidity_index = 1.2
+  oxygen_mg_l = 9.9
+  electrical_cond = 364
+===
+Record WQS-S-016:
+  ph_level = 8.11
+  water_temp = 11.7
+  turbidity_index = 2.5
+  oxygen_mg_l = 11.0
+  electrical_cond = 288
+===
+Record WQS-S-017:
+  ph_level = 7.63
+  water_temp = 16.2
+  turbidity_index = 2.0
+  oxygen_mg_l = 10.1
+  electrical_cond = 322
+===
+Record WQS-S-018:
+  ph_level = 7.41
+  water_temp = 20.1
+  turbidity_index = 1.6
+  oxygen_mg_l = 9.8
+  electrical_cond = 335
+===
+Record WQS-S-019:
+  ph_level = 7.33
+  water_temp = 15.2
+  turbidity_index = 1.8
+  oxygen_mg_l = 10.2
+  electrical_cond = 326
+===
+Record WQS-S-020:
+  ph_level = 7.17
+  water_temp = 23.0
+  turbidity_index = 1.9
+  oxygen_mg_l = 8.7
+  electrical_cond = 366
+===
