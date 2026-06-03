@@ -159,13 +159,17 @@ side: left
 bleed: true
 ---
 
+<script setup>
+const base = import.meta.env.BASE_URL
+</script>
+
 <p style="font-size: 2rem">Access to a terminal + coding skills =</p>
 
 <h1 style="font-size: 2.8rem">a <Hi>general-purpose</Hi> computer user</h1>
 
 ::media::
 
-<img src="./images/terminal.svg" alt="An agent session driven by plain-English prompts" />
+<img :src="base + 'images/terminal.svg'" alt="An agent session driven by plain-English prompts" />
 
 ---
 layout: quote
@@ -314,8 +318,12 @@ layout: center
 footer: false
 ---
 
+<script setup>
+const base = import.meta.env.BASE_URL
+</script>
+
 <div class="ag">
-  <img src="./images/Google-Antigravity-Icon-Full-Color.png" alt="Antigravity" class="ag-icon" />
+  <img :src="base + 'images/Google-Antigravity-Icon-Full-Color.png'" alt="Antigravity" class="ag-icon" />
   <h1 class="ag-word">Antigravity</h1>
   <a class="ag-link" href="https://antigravity.google" target="_blank" rel="noopener">↓ antigravity.google</a>
 </div>
