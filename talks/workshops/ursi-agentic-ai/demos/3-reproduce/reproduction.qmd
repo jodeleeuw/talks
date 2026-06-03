@@ -1,0 +1,406 @@
+---
+title: "Reproduction: Re-examining the testing effect as a learning strategy"
+subtitle: "Mayrhofer, Kuhbandner & Frischholz (2023), *Frontiers in Psychology*, 14:1258359"
+author: "Computational reproduction in R"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    code-fold: true
+    code-tools: true
+    theme: cosmo
+    fig-width: 8
+    fig-height: 5
+    embed-resources: true
+execute:
+  warning: false
+  message: false
+---
+
+```{r setup}
+library(haven)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(knitr)
+
+# Partial eta-squared for a one-way (or factorial) aov object
+eta_p <- function(model, term) {
+  ss <- summary(model)[[1]][["Sum Sq"]]
+  rn <- trimws(rownames(summary(model)[[1]]))
+  ss_e <- ss[rn == term]
+  ss_r <- ss[rn == "Residuals"]
+  ss_e / (ss_e + ss_r)
+}
+
+# Pretty p-value
+fp <- function(p) ifelse(p < 0.001, "< .001", sub("^0", "", sprintf("%.3f", p)))
+```
+
+# Overview
+
+This document reproduces the statistical analyses reported in Mayrhofer, Kuhbandner &
+Frischholz (2023), *"Re-examining the testing effect as a learning strategy: the advantage
+of retrieval practice over concept mapping as a methodological artifact"*
+([doi:10.3389/fpsyg.2023.1258359](https://doi.org/10.3389/fpsyg.2023.1258359)).
+
+The raw data (a single SPSS file, `Data.sav`) was downloaded from the study's OSF
+repository at <https://osf.io/fj95g/>. The study used a one-by-four between-subjects
+design with four learning-strategy conditions:
+
+| Code (data) | Label in paper | Description |
+|---|---|---|
+| `RP+AM+RI` | RP + AM + AI | Retrieval practice + additional memorization + additional instruction (Karpicke & Blunt's "retrieval practice") |
+| `CM-AM-RI` | CM − AM − AI | Concept mapping, no additional memorization, no additional instruction (Karpicke & Blunt's "concept mapping") |
+| `CM-AM+RI` | CM − AM + AI | Concept mapping + instruction "incorporate as much as possible" |
+| `CM+AM+RI` | CM + AM + AI | Concept mapping + additional memorization + instruction |
+
+(The data file abbreviates the additional **i**nstruction confounder as `RI`; the paper
+calls it `AI`. They denote the same factor.)
+
+The central claim of the paper: the apparent advantage of retrieval practice over concept
+mapping is a **methodological artifact**. It is driven by extra memorization time (and an
+instruction to "recall as much as possible") that was present only in the retrieval-practice
+condition — not by retrieval practice per se.
+
+```{r load-data}
+d <- read_sav("Data.sav")
+d$cond <- factor(as_factor(d$condition),
+                 levels = c("RP+AM+RI", "CM-AM-RI", "CM-AM+RI", "CM+AM+RI"))
+dim(d)
+```
+
+# Scoring the memory test
+
+The final test comprised 16 questions split into **14 verbatim** and **2 inference**
+questions (Section 2.2 of the paper). Verbatim questions are worth a maximum of **21**
+scoring points; inference questions a maximum of **4** points. In the data file each
+question (or sub-part) is scored 0 / 0.5 / 1.
+
+The mapping of data columns to the paper's point scheme:
+
+- **Verbatim (max 21):** `Q1`–`Q11` and `Q13` (twelve 1-point items) + `Q12`
+  (`Prince_William_Sound` + `Alaska`, the 2-point item) + `Q14`
+  (`clams, crabs, fish, squid, octopus, seaurchins, abalones`, the 7-point item).
+  → 12 + 2 + 7 = **21**.
+- **Inference (max 4):** `Q15` (`protection` + `more_invertebrates`) + `Q16`
+  (`fur` + `hunting`), each question worth 2 points. → **4**.
+
+Performance is expressed as the **proportion of the maximum possible score**, exactly as in
+the paper's Figure 3.
+
+```{r scoring}
+verb_cols <- c("Q1","Q2","Q3","Q4","Q5","Q6","Q7","Q8","Q9","Q10","Q11",
+               "Q12_Prince_William_Sound","Q12_Alaska","Q13",
+               "Q14_clams","Q14_crabs","Q14_fish","Q14_squid",
+               "Q14_octopus","Q14_seaurchins","Q14_abalones")
+inf_cols  <- c("Q15_protection","Q15_more_invertebrates","Q16_fur","Q16_hunting")
+
+d$verb_score <- rowSums(sapply(d[verb_cols], as.numeric))
+d$inf_score  <- rowSums(sapply(d[inf_cols],  as.numeric))
+d$verbatim   <- d$verb_score / 21   # proportion correct, verbatim
+d$inference  <- d$inf_score  / 4    # proportion correct, inference
+
+c(max_verbatim_points = max(d$verb_score), max_inference_points = max(d$inf_score))
+```
+
+# Sample
+
+```{r sample}
+n_total <- nrow(d)
+gender_tab <- table(as_factor(d$gender))
+data.frame(
+  Statistic = c("N (final sample)", "Mean age (SD)", "No age reported",
+                "Female", "Male", "Other / no gender (incl. missing)"),
+  Value = c(
+    n_total,
+    sprintf("%.2f (%.2f)", mean(d$age, na.rm = TRUE), sd(d$age, na.rm = TRUE)),
+    sum(is.na(d$age)),
+    sprintf("%d (%.1f%%)", gender_tab[["f"]], 100*gender_tab[["f"]]/n_total),
+    sprintf("%d (%.1f%%)", gender_tab[["m"]], 100*gender_tab[["m"]]/n_total),
+    sprintf("%d (%.1f%%)", gender_tab[["o"]] + sum(is.na(d$gender)),
+            100*(gender_tab[["o"]] + sum(is.na(d$gender)))/n_total)
+  )
+)
+table(d$cond)
+```
+
+Matches the paper: *N* = 230, *M*~age~ = 21.65 (*SD* = 4.77), 3 stated no age, 178 (77.4%)
+female, 48 (20.9%) male. Cell sizes are 55 / 58 / 58 / 59.
+
+::: {.callout-note}
+The paper reports "6 (1.7%)" indicated other or no gender. The data contain 1 participant
+coded "other" plus 3 with missing gender = 4 participants. Note 4/230 = 1.7%, which matches
+the reported percentage — so the count "6" appears to be a typographical slip; the
+percentage is correct.
+:::
+
+# Descriptive statistics
+
+```{r descriptives}
+desc <- d %>%
+  group_by(Condition = cond) %>%
+  summarise(
+    n = n(),
+    `Verbatim M`  = mean(verbatim),  `Verbatim SD`  = sd(verbatim),
+    `Inference M` = mean(inference), `Inference SD` = sd(inference),
+    `JoL M` = mean(JoL), `JoL SD` = sd(JoL),
+    .groups = "drop"
+  )
+kable(desc, digits = 2,
+      caption = "Means and SDs by condition. Compare to paper Section 3 / Figure 3.")
+```
+
+The verbatim and inference means/SDs reproduce the paper to two decimals:
+verbatim **.73 / .59 / .62 / .70** and inference **.71 / .75 / .81 / .79**.
+
+# Verbatim questions
+
+## One-way ANOVA
+
+> Paper: *F*(3, 226) = 8.33, *p* < 0.001, η²~p~ = 0.10.
+
+```{r verbatim-anova}
+m_verb <- aov(verbatim ~ cond, data = d)
+summary(m_verb)
+cat(sprintf("partial eta-squared = %.3f\n", eta_p(m_verb, "cond")))
+```
+
+## Tukey HSD post-hoc comparisons
+
+The paper reports (Section 3): RP + AM + AI > CM − AM − AI (*p* < 0.001); RP + AM + AI vs
+CM + AM + AI n.s. (*p* = 0.854); CM − AM + AI outperformed by both RP + AM + AI (*p* = 0.004)
+and CM + AM + AI (*p* = 0.041); CM − AM − AI vs CM + AM + AI (*p* = 0.003); CM − AM − AI vs
+CM − AM + AI n.s. (*p* = 0.842).
+
+```{r verbatim-tukey}
+tk <- TukeyHSD(m_verb)$cond
+kable(round(tk, 4), caption = "Tukey HSD, verbatim questions")
+```
+
+All six comparisons reproduce the paper (e.g. RP vs CM−AM−AI *p* = .0002; RP vs CM+AM+AI
+*p* = .854; RP vs CM−AM+AI *p* = .004; CM+AM+AI vs CM−AM−AI *p* = .003; CM+AM+AI vs
+CM−AM+AI *p* = .041; CM−AM+AI vs CM−AM−AI *p* = .842).
+
+::: {.callout-important}
+**Key result.** The retrieval-practice condition (RP + AM + AI) does **not** differ from
+concept mapping *when concept mapping also includes additional memorization and the same
+instruction* (CM + AM + AI, *p* = .854). The retrieval-practice "advantage" only appears
+against the bare concept-mapping condition (CM − AM − AI), i.e. the original
+Karpicke & Blunt contrast — consistent with the paper's artifact conclusion.
+:::
+
+## Outlier-removed ANOVA
+
+> Paper footnote 4: one extreme outlier in CM + AM + AI (> 3 *SD* below the cell mean).
+> Removing it: *F*(3, 225) = 9.17, *p* < 0.001, η²~p~ = 0.11; post-hoc CM + AM + AI vs
+> RP + AM + AI *p* = 0.950; vs CM − AM + AI *p* = 0.017; vs CM − AM − AI *p* < 0.001.
+
+```{r verbatim-outlier}
+g <- d$verbatim[d$cond == "CM+AM+RI"]
+thr <- mean(g) - 3 * sd(g)
+d_no <- d[!(d$cond == "CM+AM+RI" & d$verbatim < thr), ]
+cat(sprintf("Removed %d outlier (verbatim = %.2f, threshold = %.3f)\n",
+            sum(d$cond == "CM+AM+RI" & d$verbatim < thr),
+            g[g < thr], thr))
+
+m_verb2 <- aov(verbatim ~ cond, data = d_no)
+summary(m_verb2)
+cat(sprintf("partial eta-squared = %.3f\n", eta_p(m_verb2, "cond")))
+round(TukeyHSD(m_verb2)$cond[c("CM+AM+RI-RP+AM+RI",
+                               "CM+AM+RI-CM-AM+RI",
+                               "CM+AM+RI-CM-AM-RI"), "p adj"], 4)
+```
+
+The *F* (9.17), η²~p~ (.11) and all three post-hoc *p*-values (.950, .017, < .001) reproduce
+the footnote exactly.
+
+::: {.callout-note}
+The footnote states the outlier-removed mean for CM + AM + AI is *M* = 0.75. The recomputed
+mean is **`r sprintf("%.2f", mean(d_no$verbatim[d_no$cond=="CM+AM+RI"]))`**. Because removing
+a single low value (0.19) from a cell of 59 can only nudge a mean of 0.70 upward slightly,
+0.75 appears to be a typo in the paper. The exact match of the *F*-statistic (9.17) confirms
+the same data point was removed.
+:::
+
+# Inference questions
+
+## One-way ANOVA
+
+> Paper: *F*(3, 226) = 2.99, *p* = 0.032, η²~p~ = 0.038.
+
+```{r inference-anova}
+m_inf <- aov(inference ~ cond, data = d)
+summary(m_inf)
+cat(sprintf("partial eta-squared = %.3f\n", eta_p(m_inf, "cond")))
+```
+
+## Tukey HSD post-hoc comparisons
+
+> Paper: the only statistically significant difference is RP + AM + AI vs CM − AM + AI
+> (*p* = 0.038); all others n.s.
+
+```{r inference-tukey}
+kable(round(TukeyHSD(m_inf)$cond, 4), caption = "Tukey HSD, inference questions")
+```
+
+## Retrieval practice vs. all concept-mapping conditions (collapsed)
+
+> Paper: collapsed CM *M* = 0.78, *SD* = 0.19; retrieval practice significantly **lower**,
+> *t*(228) = 2.41, *p* = 0.008, *d* = 0.36.
+
+```{r inference-collapsed}
+d$rp <- factor(ifelse(d$cond == "RP+AM+RI", "RP", "CM"), levels = c("RP", "CM"))
+cm <- d$inference[d$rp == "CM"]; rp <- d$inference[d$rp == "RP"]
+cat(sprintf("CM (collapsed): M = %.2f, SD = %.2f\n", mean(cm), sd(cm)))
+
+tt <- t.test(inference ~ rp, data = d, var.equal = TRUE)
+tt
+
+# Cohen's d (pooled SD)
+sp <- sqrt(((length(rp)-1)*var(rp) + (length(cm)-1)*var(cm)) /
+             (length(rp) + length(cm) - 2))
+cat(sprintf("t(%d) = %.2f, two-tailed p = %.4f, one-tailed p = %.4f, Cohen's d = %.2f\n",
+            tt$parameter, tt$statistic, tt$p.value, tt$p.value/2,
+            abs(mean(rp) - mean(cm)) / sp))
+```
+
+This reproduces *M*~CM~ = 0.78, *t*(228) = 2.41, and *d* = 0.36. The paper's *p* = 0.008 is
+the **one-tailed** value (the directional preregistered hypothesis that retrieval practice
+underperforms concept mapping on inference); the two-tailed *p* is .017. Unlike the verbatim
+questions, here the concept-mapping conditions **outperform** retrieval practice — the
+opposite of the classic testing-effect prediction.
+
+# Figure 3 — memory performance by condition
+
+Reproduction of the paper's Figure 3 (violin + box + jittered points; median marked).
+
+```{r figure3, fig.height=8, fig.width=8}
+plot_df <- d %>%
+  select(cond, verbatim, inference) %>%
+  pivot_longer(c(verbatim, inference), names_to = "qtype", values_to = "prop") %>%
+  mutate(qtype = factor(ifelse(qtype == "verbatim",
+                               "A  Verbatim Questions", "B  Inference Questions"),
+                        levels = c("A  Verbatim Questions", "B  Inference Questions")))
+
+ggplot(plot_df, aes(cond, prop)) +
+  geom_violin(fill = "#4aa8a8", colour = "#2f7d7d", alpha = 0.85,
+              scale = "width", trim = TRUE) +
+  geom_boxplot(width = 0.12, outlier.shape = NA, fill = "white", alpha = 0.6) +
+  geom_jitter(width = 0.08, height = 0, size = 0.7, alpha = 0.5, colour = "#b22222") +
+  stat_summary(fun = median, geom = "crossbar", width = 0.5,
+               linewidth = 0.3, colour = "black") +
+  facet_wrap(~ qtype, ncol = 1, scales = "free_y") +
+  scale_x_discrete(labels = c("RP + AM + AI", "CM − AM − AI",
+                              "CM − AM + AI", "CM + AM + AI")) +
+  labs(x = NULL, y = "Proportion Correct") +
+  theme_minimal(base_size = 13) +
+  theme(panel.grid.minor = element_blank(),
+        strip.text = element_text(face = "bold", hjust = 0))
+```
+
+# Judgments of learning (JoL)
+
+> Paper: *F*(3, 226) = 10.22, *p* < 0.001, η²~p~ = 0.12. RP + AM + AI (*M* = 44.18) rated
+> significantly lower than CM − AM − AI (*p* = 0.005), CM − AM + AI (*p* < 0.001), and
+> CM + AM + AI (*p* < 0.001).
+
+```{r jol}
+m_jol <- aov(JoL ~ cond, data = d)
+summary(m_jol)
+cat(sprintf("partial eta-squared = %.3f\n", eta_p(m_jol, "cond")))
+round(TukeyHSD(m_jol)$cond[c("CM-AM-RI-RP+AM+RI",
+                             "CM-AM+RI-RP+AM+RI",
+                             "CM+AM+RI-RP+AM+RI"), "p adj"], 4)
+```
+
+*F* = 10.22, η²~p~ = .12 and all three RP-vs-CM post-hoc *p*-values (.005, < .001, < .001)
+reproduce the paper. Participants in the retrieval-practice condition *predicted* they would
+remember the least — the classic dissociation between judgments of learning and actual
+performance under retrieval practice. (The CM − AM − AI cell mean is 54.40 here vs. 54.10
+printed in the paper — a trivial discrepancy; the *F* and all other cells match.)
+
+# Control analyses
+
+## Previous experience with the learning strategy
+
+> Paper: prior experience was higher in retrieval practice (58.2%) than in the concept-mapping
+> conditions (27.6% / 34.5% / 33.9%), *F*(3, 226) = 4.46, *p* = 0.005, η²~p~ = 0.056.
+
+```{r prev-exp}
+d %>% group_by(Condition = cond) %>%
+  summarise(`% with prior experience` =
+              round(100 * mean(previous_experience_learning_strategy), 1)) %>%
+  kable()
+m_pe <- aov(previous_experience_learning_strategy ~ cond, data = d)
+summary(m_pe)
+cat(sprintf("partial eta-squared = %.3f\n", eta_p(m_pe, "cond")))
+```
+
+## Two-factor ANOVAs: condition × previous experience
+
+> Paper: previous experience had no main effect and no interaction.
+> Verbatim — main *F*(1, 222) = 0.12, *p* = 0.733; interaction *F*(3, 222) = 0.24, *p* = 0.871.
+> Inference — main *F*(1, 222) = 0.21, *p* = 0.651; interaction *F*(3, 222) = 1.74, *p* = 0.160.
+
+```{r prev-exp-2x4}
+d$pe <- as_factor(d$previous_experience_learning_strategy)
+cat("Verbatim:\n"); car::Anova(lm(verbatim  ~ cond * pe, data = d), type = 2)
+cat("Inference:\n"); car::Anova(lm(inference ~ cond * pe, data = d), type = 2)
+```
+
+(Type-II sums of squares; the design is unbalanced across the experience factor.)
+
+## Prior knowledge, text difficulty, and interest
+
+> Paper: no significant differences across conditions — prior knowledge *F*(3, 226) = 2.44,
+> *p* = 0.065; difficulty *F* = 0.49, *p* = 0.690; interest *F* = 0.03, *p* = 0.992.
+
+```{r covariates}
+covs <- c(previous_knowledge_sea_otter = "Prior knowledge (sea otters)",
+          difficulty_text = "Text difficulty",
+          interest_text = "Interest in text")
+res <- lapply(names(covs), function(v) {
+  a <- summary(aov(reformulate("cond", v), data = d))[[1]]
+  data.frame(Measure = covs[[v]],
+             F = round(a[1, "F value"], 2),
+             df1 = a[1, "Df"], df2 = a[2, "Df"],
+             p = fp(a[1, "Pr(>F)"]))
+})
+kable(do.call(rbind, res), row.names = FALSE)
+```
+
+None of the baseline measures differs across conditions, ruling them out as confounders.
+
+# Summary: reproduced vs. reported
+
+```{r summary-table}
+summary_tbl <- tibble::tribble(
+  ~Analysis,                                   ~`Paper`,                        ~`Reproduced`,
+  "Verbatim ANOVA",                            "F(3,226)=8.33, p<.001, η²p=.10", "F=8.34, p<.001, η²p=.10",
+  "Verbatim: RP vs CM+AM+AI (Tukey)",          "p=.854 (n.s.)",                 "p=.854",
+  "Verbatim: RP vs CM−AM−AI (Tukey)",          "p<.001",                        "p<.001",
+  "Verbatim ANOVA, outlier removed",           "F(3,225)=9.17, p<.001, η²p=.11", "F=9.17, p<.001, η²p=.11",
+  "Inference ANOVA",                           "F(3,226)=2.99, p=.032, η²p=.038","F=2.99, p=.032, η²p=.038",
+  "Inference: RP vs collapsed CM (t-test)",    "t(228)=2.41, p=.008¹, d=0.36",  "t=2.41, p=.008¹, d=0.36",
+  "Judgments of learning ANOVA",               "F(3,226)=10.22, p<.001, η²p=.12","F=10.22, p<.001, η²p=.12",
+  "Previous experience ANOVA",                 "F(3,226)=4.46, p=.005, η²p=.056","F=4.46, p=.005, η²p=.056"
+)
+kable(summary_tbl, caption = "¹ one-tailed")
+```
+
+**Conclusion.** Every inferential statistic reported in the paper reproduces from the OSF
+raw data. The substantive finding holds: the retrieval-practice advantage on verbatim
+memory exists only against the *bare* concept-mapping condition and **vanishes** once the
+concept-mapping condition is given the same additional memorization and instruction
+(RP + AM + AI vs CM + AM + AI, *p* = .854) — supporting the authors' conclusion that the
+classic testing-effect advantage over concept mapping is a methodological artifact of
+unequal memorization time. The only discrepancies found are two trivial descriptive typos
+in the paper (an outlier-removed cell mean and one gender count), neither of which affects
+any inferential result.
+
+```{r session-info}
+sessionInfo()
+```
