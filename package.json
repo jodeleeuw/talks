@@ -3,5 +3,8 @@
   "packageManager": "pnpm@11.5.0",
   "scripts": {
     "new": "node scripts/new-talk.mjs"
+  },
+  "devDependencies": {
+    "@inquirer/prompts": "^8.5.2"
   }
 }

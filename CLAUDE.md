@@ -16,7 +16,7 @@ pnpm export    # PDF (requires playwright-chromium)
 
 **Package manager: pnpm, not npm.** Each talk still has its own `node_modules`, but pnpm hard-links every package from one global content-addressable store (`~/Library/pnpm/store` on this machine), so identical dependency versions across dozens of talks cost disk space only once. `npm install` would re-copy ~450 MB per talk and defeats this — always use `pnpm`. pnpm is provided by Corepack (`corepack enable pnpm`); the version is pinned in each `package.json`'s `packageManager` field. The Corepack/pnpm-11 loader needs Node 20+ (Node 24 in use here; nvm's default alias must point at it).
 
-The root `package.json` exists only to expose `pnpm new` → `scripts/new-talk.mjs`, the interactive scaffolder (prompts for parent dir + name, copies `template/`, runs `pnpm install`, opens VS Code, starts dev server). It has no runtime dependencies of its own. `README.md` also documents the by-hand `cp -r template/ …` flow. The other common path right now is the `pptx-to-slidev` skill — see below.
+The root `package.json` exists only to expose `pnpm new` → `scripts/new-talk.mjs`, the interactive scaffolder. It presents a searchable, navigable folder picker (type to filter the current dir, ⏎ to drill in, "use this folder" to choose a parent) built on `@inquirer/prompts` — its one root `devDependency` — then prompts for a name, copies `template/`, patches the new `package.json` name, runs `pnpm install`, opens VS Code, and starts the dev server. `README.md` also documents the by-hand `cp -r template/ …` flow. The other common path right now is the `pptx-to-slidev` skill — see below.
 
 ## The tooling, not the talks
 
