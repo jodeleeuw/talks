@@ -4,8 +4,8 @@ pptx-to-slidev prep: scaffold a Slidev talk dir from a PPTX file and
 emit a structured analysis Claude can read to write slides.md.
 
 Stdlib only. Writes a new talk dir under <repo>/<output-name>/ containing:
-  - everything in template/ (package.json, slides.md, vite.config.ts,
-    components/Diagram.vue, diagrams/, ...)
+  - everything in template/ (package.json, pnpm-lock.yaml, slides.md,
+    diagrams/, ...)
   - every image from the PPTX, co-located with slides.md
   - _analysis.json + _analysis.md describing each slide
 """
@@ -2179,7 +2179,7 @@ def write_summary(path, analysis):
                     f"pictures) — if these aren't a clean grid (gallery) or a "
                     f"single dominant figure (media/image), drop the block below "
                     f"into slide frontmatter and the tags into the body. Then "
-                    f"`npm run dev` and **double-click any sticker** to drag / "
+                    f"`pnpm dev` and **double-click any sticker** to drag / "
                     f"resize / rotate in place — the editor writes positions back "
                     f"to the `dragPos:` block. Prefer this over `layout: image` + "
                     f"a thumbnail when the slide also has decorative chrome (cloud "
@@ -2386,7 +2386,7 @@ def main():
 
     # template/ has a populated node_modules from the user's normal workflow;
     # copying it is slow (~500 MB) and corrupts the .bin/ symlinks, which then
-    # breaks `npm run build`. Ignore it (and other generated dirs) and let the
+    # breaks `pnpm build`. Ignore it (and other generated dirs) and let the
     # user install fresh in the new talk dir.
     shutil.copytree(
         template, dest_dir,

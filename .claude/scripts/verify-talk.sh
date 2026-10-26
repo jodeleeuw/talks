@@ -10,9 +10,9 @@
 #   --out DIR    where to write PNGs (default: <talk-dir>/_shots/)
 #
 # Does, in order:
-#   1. npm install (if node_modules missing or package.json newer)
-#   2. npx slidev build → check exit code, then rm -rf dist
-#   3. start `npm run dev`, wait until HTTP 200 on / (timeout 30s)
+#   1. pnpm install (if node_modules missing or package.json newer)
+#   2. pnpm exec slidev build → check exit code, then rm -rf dist
+#   3. start `pnpm exec slidev`, wait until HTTP 200 on / (timeout 30s)
 #   4. headless-chrome screenshot each requested slide to <out>/slide-N.png
 #   5. stop dev server
 #   6. print one line per shot (path + http status)
@@ -65,20 +65,20 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# ---- 1. npm install ---------------------------------------------------------
+# ---- 1. pnpm install --------------------------------------------------------
 
 cd "$TALK_DIR"
 
 if [[ ! -d node_modules ]] || [[ package.json -nt node_modules ]]; then
-  echo "verify-talk: npm install"
-  npm install --no-audit --no-fund --silent 2>&1 | tail -5 || die "npm install failed"
+  echo "verify-talk: pnpm install"
+  pnpm install --silent 2>&1 | tail -5 || die "pnpm install failed"
 fi
 
 # ---- 2. build --------------------------------------------------------------
 
-echo "verify-talk: npx slidev build"
+echo "verify-talk: pnpm exec slidev build"
 BUILD_LOG="$(mktemp -t verify-talk-build.XXXXXX)"
-if ! npx slidev build > "$BUILD_LOG" 2>&1; then
+if ! pnpm exec slidev build > "$BUILD_LOG" 2>&1; then
   echo "verify-talk: BUILD FAILED:" >&2
   tail -40 "$BUILD_LOG" >&2
   rm -f "$BUILD_LOG"
@@ -108,7 +108,7 @@ done
 
 DEV_LOG="$(mktemp -t verify-talk-dev.XXXXXX)"
 echo "verify-talk: starting dev on :$PORT"
-(npx slidev --port "$PORT" > "$DEV_LOG" 2>&1) &
+(pnpm exec slidev --port "$PORT" > "$DEV_LOG" 2>&1) &
 DEV_PID=$!
 
 # wait for HTTP 200
