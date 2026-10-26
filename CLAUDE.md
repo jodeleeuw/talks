@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repo shape
 
-This repo is a collection of [Slidev](https://sli.dev) talks. Each talk is a self-contained directory (at the repo root or under a bucket like `workshops/` / `tmp_talks/`), scaffolded from `template/`. Talks own their dependencies — there is no shared/hoisted `node_modules`, every talk installs/builds independently:
+This repo is a collection of [Slidev](https://sli.dev) talks. Each talk is a self-contained directory, scaffolded from `template/`. Kept talks live under `talks/<bucket>/<name>/` (e.g. `talks/workshops/ursi-agentic-ai`, `talks/classes/…`); throwaway generations go in `tmp_talks/` (gitignored). Never scaffold at the repo root — the `pnpm new` picker starts there, so drill into `talks/` first. Talks own their dependencies — there is no shared/hoisted `node_modules`, every talk installs/builds independently:
 
 ```bash
 cd <talk-dir>
@@ -20,7 +20,13 @@ The root `package.json` exists only to expose `pnpm new` → `scripts/new-talk.m
 
 ## The tooling, not the talks
 
-Right now the project is focused on building the PPTX → Slidev pipeline, not on producing keepable decks. Generated talks land in `tmp_talks/` (gitignored), and `*.pptx` source files are gitignored too. Don't be surprised that the repo looks "empty" of talks — that's deliberate. Long-term-usable talks would live at the repo root; throwaway generations live in `tmp_talks/`.
+Much of the work is on the PPTX → Slidev pipeline. Its output lands in `tmp_talks/` unless the user asks for a kept talk under `talks/`. `*.pptx` source files are gitignored.
+
+## Deploy (GitHub Pages)
+
+`.github/workflows/deploy.yml` runs on push to `main`: it builds every directory under `talks/` that has a `package.json` (any nesting) with `pnpm build --base /<repo>/<path-under-talks>/` and publishes them with a generated index page. Only `talks/` is deployed — not the root, not `tmp_talks/`.
+
+Because of the non-root base, relative `./images/foo.png` paths break in the deployed build. Put assets in the talk's `public/` dir and reference them via `import.meta.env.BASE_URL`: `<script setup>const base = import.meta.env.BASE_URL</script>` … `<img :src="base + 'images/foo.png'" />`.
 
 ## Skills
 
@@ -29,6 +35,8 @@ Three skills under `.claude/skills/` drive the workflow:
 - **`google-slides-export`** — pulls a Google Slides deck (or a whole Drive folder) down to `.pptx` via browser OAuth. Run this first when the user only has a Slides URL.
 - **`pptx-to-slidev`** — the main one. `prep.py` scaffolds a new talk dir from `template/`, extracts images, and emits `_analysis.json` + `_analysis.md`. Claude then reads the analysis and hand-writes `slides.md`. Read `.claude/skills/pptx-to-slidev/SKILL.md` end to end before invoking — it documents the click-mapping rules, the `<Diagram>` spec, and several non-obvious gotchas.
 - **`slidev`** — general Slidev reference (layouts, components, Vue/Markdown interop).
+
+`.claude/scripts/verify-talk.sh <talk-dir>` builds a talk and screenshots every slide; `cleanup-talk.sh` is its companion.
 
 ## The `slidev-theme-fenbrook` theme
 
@@ -42,7 +50,7 @@ What the theme provides:
 - **`<Quiet>`** — companion to `<Hi>`. Mutes color + drops opacity so the surrounding sentence fades behind the highlighted keyword: `<Quiet>Environmental</Quiet> <Hi>science</Hi>`. `variant="strike"` adds a line-through.
 - **`<DataTable>`** — styled table for truth tables and small data grids: `<DataTable :headers="['A','B']" :rows="[[0,1],[1,0]]" :highlight-row="1" :highlight-col="0" />`. Monospace by default (`mono="false"` to switch off). `header-rotate="vertical-up" | "vertical-down"` rotates column headers 90° (matches PPTX `vert=270` on co-occurrence-matrix headers).
 - **`<Cropped>`** — wrapper for PPTX cropped pictures. `<Cropped src :crop="{ l, t, r, b }" :aspect="[w, h]" />` fills its parent (gallery cell, media slot) and applies the scale + offset math the analysis prints under `✂ crop l=…% t=…% r=…% b=…%`.
-- **`<Sticker>`** — drag-positioned floating image. `<Sticker id="…" src="./image.png" />` paired with a `dragPos:` block in slide frontmatter (`dragPos: { <id>: "x,y,w,h" }` or `"x,y,w,h,rotation"`). Wraps Slidev's built-in `<v-drag>` in frontmatter-id mode so the markdown body stays clean even when a slide has 10+ images. Double-click any sticker in `npm run dev` to drag/resize/rotate; the editor writes the new pos back to `dragPos[id]`. Props: `frame: 'none' | 'polaroid' | 'shadow'`, `rotate` (fixed decorative tilt). Use for slides with many irregularly-placed images where `gallery`/`media`/`image-bg` don't fit; `prep.py` emits a ready-to-paste `dragPos:` block + `<Sticker>` lines under a `🪧 Sticker candidate` annotation when it spots ≥ 3 free-floating pictures.
+- **`<Sticker>`** — drag-positioned floating image. `<Sticker id="…" src="./image.png" />` paired with a `dragPos:` block in slide frontmatter (`dragPos: { <id>: "x,y,w,h" }` or `"x,y,w,h,rotation"`). Wraps Slidev's built-in `<v-drag>` in frontmatter-id mode so the markdown body stays clean even when a slide has 10+ images. Double-click any sticker in `pnpm dev` to drag/resize/rotate; the editor writes the new pos back to `dragPos[id]`. Props: `frame: 'none' | 'polaroid' | 'shadow'`, `rotate` (fixed decorative tilt). Use for slides with many irregularly-placed images where `gallery`/`media`/`image-bg` don't fit; `prep.py` emits a ready-to-paste `dragPos:` block + `<Sticker>` lines under a `🪧 Sticker candidate` annotation when it spots 2+ free-floating pictures.
 - **`<AnnotatedImage>` + `<Box>` / `<Label>` / `<Layer>` / `<Mask>`** — overlay primitives for image-substrate slides. `<AnnotatedImage src :viewbox="[w, h]">` provides a source-pixel coord system via Vue provide/inject; the children position absolutely in that space. Sizes itself like an `<img object-fit:contain>` — fills the available parent space without overflowing on either axis; pass `width` / `max-width` / `max-height` (CSS length or px number) for explicit caps. `layout="container"` switches to "fill an externally-sized parent" mode. Each child takes the same reveal API as a Diagram item (`reveal-at`, `reveal: { from, to | until }`, `hide-at`). `<Mask>` is shown by default and primarily uses `hide-at` to lift on click (variants: `'solid'` opaque, `'dim'` translucent darken, `'blur'` frosted glass). Replaces the older `.stage`-div + Diagram-with-overlay recipe for annotated-photo / image-swap slides.
 - **`<Diagram>`** — SVG-rendering component driven by a declarative spec. Spec reference: [docs/DIAGRAM.md in the theme repo](https://github.com/jodeleeuw/slidev-theme-fenbrook/blob/main/docs/DIAGRAM.md). Uses `revealAt: N` / `reveal: { from, to }` for click-driven build-ups (translated internally to `v-click`). Outside `<Diagram>`, you write raw `v-click` directives directly on Vue elements — the two have different conventions, including the half-open range trap noted in user memory. The SKILL.md "Direct `v-click` syntax gotchas" table is the authoritative reference. Also has a `startAt: Number` prop that rewrites every reveal directive on every spec item as if the first `startAt` clicks already happened — `revealAt: 5` with `startAt: 3` becomes effective `revealAt: 2`; `revealAt: 3` becomes always-visible. `textByClick` keys shift too; the most-recent past entry overwrites the click-0 state. Lets one spec be reused across multiple slides without duplicating it. The spec also supports an `axes: [...]` field — declarative `{ kind: 'vertical' | 'horizontal', x | y, from, to, label }` chart axes that skip the fiddle of declaring axes as free-endpoint connectors with `arrow: "none"`.
 - **`global-top.vue`** — persistent footer (course/event left, page number + signature mark right).
@@ -65,7 +73,7 @@ Non-obvious gotchas (mostly relevant when editing the theme repo itself):
 - **Always set `layout: cover` explicitly on slide 1.** Slidev's `currentLayout` composable falls back to `'cover'` for slide 1 when `meta.layout` is missing, but that fallback depends on `currentSlideNo` which races with `currentSlideRoute` during navigation. Explicit layout eliminates the race and the resulting footer flicker.
 - **UnoCSS preflight strips `ol`/`ul` markers globally.** The `default`, `panel`, and `center` layouts each re-assert `list-style: decimal | disc; padding-left: 1.5rem` via scoped `:deep(ol)` / `:deep(ul)` rules so plain markdown numbered/bulleted lists render with visible markers. The `aside` and `outro` layouts deliberately use `list-style: none` with their own `::before` arrow markers and win at equal specificity inside their own components. If you add a new layout, copy the list-fix block from `default.vue`.
 - **Don't read layout via `nav.currentLayout`** in components — use `nav.currentSlideRoute.value?.meta?.layout` directly, for the same race reason.
-- **Iterating on the theme**: clone the theme repo, then in a consuming talk run `npm link <path-to-theme-repo>` for live edits. When happy, push + tag, and bump the `#main` / `#vX.Y.Z` ref in the talk's `package.json`.
+- **Iterating on the theme**: clone the theme repo, then in a consuming talk run `pnpm link <path-to-theme-repo>` for live edits. When happy, push + tag, and bump the `#main` / `#vX.Y.Z` ref in the talk's `package.json`.
 
 ## prep.py architecture
 
