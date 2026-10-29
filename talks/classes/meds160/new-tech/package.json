@@ -1,0 +1,15 @@
+{
+  "name": "new-tech",
+  "type": "module",
+  "packageManager": "pnpm@11.5.0",
+  "scripts": {
+    "dev": "slidev",
+    "build": "slidev build",
+    "export": "slidev export"
+  },
+  "dependencies": {
+    "@slidev/cli": "^53.0.0",
+    "js-tiktoken": "1.0.21",
+    "slidev-theme-fenbrook": "github:jodeleeuw/slidev-theme-fenbrook#main"
+  }
+}

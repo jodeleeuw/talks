@@ -1,0 +1,8 @@
+# Workaround for slidevjs/slidev#2761: @comark/markdown-it (a @slidev/cli
+# dep) imports markdown-it/lib/token.mjs, which markdown-it 15 no longer
+# exports. Giving @slidev/cli a direct markdown-it@14 dep makes pnpm resolve
+# Comark's peer to 14; Shiki keeps its own 15. Remove once fixed upstream.
+packageExtensions:
+  '@slidev/cli':
+    dependencies:
+      markdown-it: ^14.3.3

@@ -1,0 +1,152 @@
+{
+  "w": 960,
+  "h": 440,
+  "boxes": [
+    {
+      "id": "x1",
+      "x": 120,
+      "y": 90,
+      "w": 70,
+      "h": 70,
+      "anchor": "center",
+      "shape": "ellipse",
+      "text": "x₁"
+    },
+    {
+      "id": "x2",
+      "x": 120,
+      "y": 210,
+      "w": 70,
+      "h": 70,
+      "anchor": "center",
+      "shape": "ellipse",
+      "text": "x₂"
+    },
+    {
+      "id": "x3",
+      "x": 120,
+      "y": 330,
+      "w": 70,
+      "h": 70,
+      "anchor": "center",
+      "shape": "ellipse",
+      "text": "x₃"
+    },
+    {
+      "id": "sum",
+      "x": 480,
+      "y": 210,
+      "w": 110,
+      "h": 110,
+      "anchor": "center",
+      "shape": "ellipse",
+      "text": "Σ",
+      "fontSize": 34
+    },
+    {
+      "id": "th",
+      "x": 690,
+      "y": 210,
+      "w": 120,
+      "h": 76,
+      "anchor": "center",
+      "shape": "roundRect",
+      "text": "≥ θ ?"
+    },
+    {
+      "id": "out",
+      "x": 880,
+      "y": 210,
+      "w": 76,
+      "h": 76,
+      "anchor": "center",
+      "shape": "ellipse",
+      "text": "0 / 1"
+    },
+    {
+      "x": 120,
+      "y": 405,
+      "w": 190,
+      "h": 50,
+      "anchor": "center",
+      "style": "bio",
+      "wrap": true,
+      "fontSize": 15,
+      "text": "dendrites: incoming signals",
+      "revealAt": 1
+    },
+    {
+      "x": 300,
+      "y": 405,
+      "w": 170,
+      "h": 50,
+      "anchor": "center",
+      "style": "bio",
+      "wrap": true,
+      "fontSize": 15,
+      "text": "synapses: connection strength",
+      "revealAt": 2
+    },
+    {
+      "x": 585,
+      "y": 405,
+      "w": 300,
+      "h": 50,
+      "anchor": "center",
+      "style": "bio",
+      "wrap": true,
+      "fontSize": 15,
+      "text": "cell body: adds it up, fires past a threshold",
+      "revealAt": 3
+    },
+    {
+      "x": 880,
+      "y": 405,
+      "w": 150,
+      "h": 50,
+      "anchor": "center",
+      "style": "bio",
+      "wrap": true,
+      "fontSize": 15,
+      "text": "axon: fire or don't",
+      "revealAt": 4
+    }
+  ],
+  "connectors": [
+    {
+      "from": "x1.right",
+      "to": "sum.left",
+      "label": "w₁",
+      "labelAt": 0.45,
+      "labelOffset": {
+        "dy": -12
+      }
+    },
+    {
+      "from": "x2.right",
+      "to": "sum.left",
+      "label": "w₂",
+      "labelAt": 0.45,
+      "labelOffset": {
+        "dy": -12
+      }
+    },
+    {
+      "from": "x3.right",
+      "to": "sum.left",
+      "label": "w₃",
+      "labelAt": 0.45,
+      "labelOffset": {
+        "dy": 18
+      }
+    },
+    {
+      "from": "sum.right",
+      "to": "th.left"
+    },
+    {
+      "from": "th.right",
+      "to": "out.left"
+    }
+  ]
+}
