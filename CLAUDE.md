@@ -30,7 +30,7 @@ Because of the non-root base, relative `./images/foo.png` paths break in the dep
 
 ## Shared components (`addons/cogsci-demos`)
 
-Interactive demos used by more than one talk (`<TuringMachine>`, `<HodgkinHuxley>`, `<PerceptronPlayground>`) live in `addons/cogsci-demos/`, a local Slidev addon. A talk opts in with `addons: ['@/../../../../addons/cogsci-demos']` in its headmatter (`@/` = the talk's folder; one `../` per level up to the repo root). No install step and edits are live. It sits outside `talks/` so the deploy workflow doesn't try to build it as a talk. See its README for props. Course-agnostic components that belong in every talk go in the theme instead; a talk's own one-off components stay in its `components/`.
+Interactive demos used by more than one talk (`<TuringMachine>`, `<HodgkinHuxley>`, `<PerceptronPlayground>`, `<FlashTrial>`, `<InteractiveActivation>`, `<ActivationUnit>`, `<DeltaRule>`, `<BackpropChain>`, `<GradientDescent>`, `<TrainingBatches>`, `<OverfitPlayground>`, `<PolynomialFit>`) live in `addons/cogsci-demos/`, a local Slidev addon. A talk opts in with `addons: ['@/../../../../addons/cogsci-demos']` in its headmatter (`@/` = the talk's folder; one `../` per level up to the repo root). No install step and edits are live. It sits outside `talks/` so the deploy workflow doesn't try to build it as a talk. See its README for props. Most take `:step="$clicks"` for click-driven builds and `:controls="false"` to hide their buttons; shared logic lives in its `lib/` and the `.cd-*` control styles in its `styles/index.css`. Course-agnostic components that belong in every talk go in the theme instead; a talk's own one-off components stay in its `components/`.
 
 ## Skills
 
