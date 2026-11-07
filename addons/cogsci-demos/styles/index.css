@@ -1,0 +1,31 @@
+/* Shared look for the cogsci-demos widgets: buttons, slider rows, plots.
+   Slidev loads styles/index.css from every addon, so these are global; all
+   class names start with cd- to stay out of the way of talk styles. */
+
+.cd-controls { display: flex; flex-wrap: wrap; gap: 0.45rem 0.9rem; align-items: center; font-size: 0.85rem; color: var(--fenbrook-fg-soft, currentColor); }
+.cd-controls p { margin: 0; }
+.cd-row { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+.cd-btn {
+  font: inherit; font-size: 0.82rem; line-height: 1.3; padding: 0.22rem 0.65rem; border-radius: 6px; cursor: pointer;
+  background: transparent; color: var(--fenbrook-fg, currentColor); border: 1px solid var(--fenbrook-rule, #555);
+}
+.cd-btn:hover { border-color: var(--fenbrook-accent, orange); }
+.cd-btn.primary, .cd-btn.on { border-color: var(--fenbrook-accent, orange); color: var(--fenbrook-accent, orange); }
+.cd-btn:disabled { opacity: 0.4; cursor: default; }
+.cd-slider { display: inline-flex; align-items: center; gap: 0.45rem; }
+.cd-slider input[type="range"] { width: 120px; accent-color: var(--fenbrook-accent, orange); }
+.cd-slider b, .cd-num { font-family: 'JetBrains Mono', monospace; font-weight: 400; color: var(--fenbrook-fg, currentColor); font-variant-numeric: tabular-nums; }
+.cd-check { display: inline-flex; align-items: center; gap: 0.35rem; }
+.cd-check input { accent-color: var(--fenbrook-accent, orange); }
+.cd-note { font-size: 0.82rem; color: var(--fenbrook-fg-soft, currentColor); margin: 0; }
+.cd-note b { color: var(--fenbrook-fg, currentColor); font-weight: 600; }
+.cd-mono { font-family: 'JetBrains Mono', monospace; }
+
+/* SVG plot pieces */
+.cd-axis { stroke: var(--fenbrook-muted, #888); stroke-width: 1.2; fill: none; }
+.cd-grid { stroke: var(--fenbrook-rule, #333); stroke-width: 1; }
+.cd-tick { fill: var(--fenbrook-muted, #999); font-size: 12px; }
+.cd-label { fill: var(--fenbrook-muted, #999); font-size: 13px; }
+.cd-text { fill: var(--fenbrook-fg, currentColor); font-size: 14px; }
+.cd-accent { stroke: var(--fenbrook-accent, orange); }
+.cd-fill-accent { fill: var(--fenbrook-accent, orange); }

@@ -1,0 +1,19 @@
+{
+  "name": "slidev-addon-cogsci-demos",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Interactive teaching demos for the cognitive science talks: a Turing machine, a Hodgkin-Huxley neuron, and a perceptron that can't learn XOR.",
+  "keywords": [
+    "slidev-addon",
+    "slidev"
+  ],
+  "license": "MIT",
+  "author": "Josh de Leeuw",
+  "engines": {
+    "slidev": ">=0.48.0"
+  },
+  "peerDependencies": {
+    "vue": "^3.4.0"
+  },
+  "type": "module"
+}

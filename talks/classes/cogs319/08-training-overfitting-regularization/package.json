@@ -1,0 +1,14 @@
+{
+  "name": "08-training-overfitting-regularization",
+  "type": "module",
+  "packageManager": "pnpm@11.5.0",
+  "scripts": {
+    "dev": "slidev",
+    "build": "slidev build",
+    "export": "slidev export"
+  },
+  "dependencies": {
+    "@slidev/cli": "^53.0.0",
+    "slidev-theme-fenbrook": "github:jodeleeuw/slidev-theme-fenbrook#main"
+  }
+}
