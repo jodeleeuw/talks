@@ -6,6 +6,8 @@ info: |
   COGS 319: from Turing machines and McCulloch & Pitts neurons to
   perceptrons, multi-layer networks, and the past-tense debate.
 transition: fade
+addons:
+  - '@/../../../../addons/cogsci-demos'
 themeConfig:
   course: COGS 319
   event: Origins of Neural Networks
@@ -83,7 +85,10 @@ It became known as a Turing Machine.
 clicks: 7
 ---
 
-<TuringMachine mode="diagram" />
+<TuringMachine tape="__yxxyx__" :head="3" start="0" labels="long"
+  :rules="[['0', 'x', 'x', 'R', '0'], ['0', 'y', 'x', 'R', 'HALT']]"
+  :reveal="$clicks"
+  :step="Math.max(0, $clicks - 4)" />
 
 <!--
 What is a Turing Machine?
@@ -103,7 +108,9 @@ A table of rules defines what the machine will do in any given state/symbol comb
 clicks: 3
 ---
 
-<TuringMachine mode="table" />
+<TuringMachine tape="__yxxyx__" :head="3" start="0" view="table"
+  :rules="[['0', 'x', 'x', 'R', '0'], ['0', 'y', 'x', 'R', 'HALT']]"
+  :step="$clicks" />
 
 <!--
 What is a Turing Machine?
@@ -117,6 +124,23 @@ At each step, the head must read the symbol, write a new symbol, and move either
 The head has internal state, which governs the rules for reading, writing, and moving.
 
 A table of rules defines what the machine will do in any given state/symbol combination.
+-->
+
+---
+layout: panel
+---
+
+## Try it
+
+<TuringMachine tape="__yxxyx__" :head="3" start="0" view="both" editable
+  :rules="[['0', 'x', 'x', 'R', '0'], ['0', 'y', 'x', 'R', 'HALT']]" />
+
+<style scoped>
+:deep(.tm) { max-height: 370px; }
+</style>
+
+<!--
+Interactive: Step, Back, Run. Type a new tape in the box (use _ for blanks) to try other inputs, e.g. one with no y, which runs off forever to the right.
 -->
 
 ---
@@ -187,10 +211,27 @@ These operations are Turing Complete (with some assumptions about the tape)
 </style>
 
 ---
+layout: panel
+gap: 0.75rem
+---
 
-One direction we could go from here: More biological realism.
+<p class="hh-lead">One direction we could go from here: More biological realism.</p>
 
-Hodgkin & Huxley model [[Web demo](https://www.andrewkrause.org/tools-code/hodgkin-huxley-simulation-with-javascript)]
+## Hodgkin & Huxley model
+
+<HodgkinHuxley />
+
+<p class="hh-src"><a href="https://www.andrewkrause.org/tools-code/hodgkin-huxley-simulation-with-javascript">Original web demo</a></p>
+
+<style scoped>
+.hh-lead { margin: 0; color: var(--fenbrook-fg-soft); font-size: 1.1rem; }
+h2 { margin: 0; font-size: 1.8rem; }
+.hh-src { margin: 0; text-align: right; font-size: 0.8rem; }
+</style>
+
+<!--
+Live simulation. Stimulate with a small pulse (under about 7) and nothing happens; a bigger one fires a spike. Raise the steady current past about 6.3 and it fires repeatedly, faster as the current grows. "Show gates" plots m, h and n.
+-->
 
 ---
 layout: center
@@ -342,6 +383,18 @@ layout: panel
 .cant h2 { font-size: 1.6rem; margin: 0 0 0.4rem; }
 .cant p { margin: 0.2rem 0; font-size: 1.15rem; }
 </style>
+
+---
+layout: panel
+---
+
+## Can any weights separate XOR?
+
+<PerceptronPlayground problem="xor" />
+
+<!--
+Drag w1, w2 and b. The shaded side outputs 1. Nothing gets all four right; "Try every setting" checks about 15,000 and the best is 3 of 4. AND and OR (buttons at the top) are easy. "Train" runs the perceptron learning rule: it settles on AND and OR and cycles forever on XOR.
+-->
 
 ---
 layout: panel
